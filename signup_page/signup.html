@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Signup</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="card">
+    <h2>Create Account</h2>
+
+    <input type="email" id="signupEmail" placeholder="Enter Email">
+
+    <div class="toggle">
+        <input type="password" id="signupPassword" placeholder="Enter Password">
+        <span onclick="togglePassword()">Show</span>
+    </div>
+
+    <input type="password" id="confirmPassword" placeholder="Confirm Password">
+
+    <div class="error" id="errorMsg"></div>
+
+    <button onclick="signup()">Signup</button>
+
+    <p class="link">
+        Already have account? 
+        <a href="../login_page/login.html">Login</a>
+    </p>
+</div>
+
+<script>
+function togglePassword(){
+    let pass = document.getElementById("signupPassword");
+    pass.type = pass.type === "password" ? "text" : "password";
+}
+
+function signup(){
+    let email = document.getElementById("signupEmail").value.trim();
+    let password = document.getElementById("signupPassword").value;
+    let confirmPassword = document.getElementById("confirmPassword").value;
+    let error = document.getElementById("errorMsg");
+
+    error.innerHTML = "";
+
+    if(email === "" || password === "" || confirmPassword === ""){
+        error.innerHTML = "All fields are required!";
+        return;
+    }
+
+    if(password.length < 8){
+        error.innerHTML = "Password must be at least 8 characters!";
+        return;
+    }
+
+    if(password !== confirmPassword){
+        error.innerHTML = "Passwords do not match!";
+        return;
+    }
+
+    localStorage.setItem("email", email);
+    localStorage.setItem("password", btoa(password));
+
+    alert("Signup Successful!");
+
+    window.location.href = "../index.html";
+}
+</script>
+
+</body>
+</html>

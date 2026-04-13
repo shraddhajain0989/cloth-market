@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>FitCheck - Home</title>
+<link rel="stylesheet" href="css/style.css">
+
+<script>
+document.addEventListener("DOMContentLoaded", function(){
+
+    let isLoggedIn = localStorage.getItem("loggedIn");
+
+    if(isLoggedIn !== "true"){
+        window.location.href = "home.html";
+    }
+
+});
+</script>
+
+</head>
+
+<body>
+
+<header>
+    <h1>FitCheck</h1>
+
+    <nav>
+        <a href="login_page/login.html" id="loginLink">Login</a>
+        <a href="signup_page/signup.html" id="signupLink">Signup</a>
+
+        <span id="welcomeUser" style="display:none;"></span>
+        <a href="#" id="logoutBtn" style="display:none;" onclick="logout()">Logout</a>
+    </nav>
+</header>
+
+<section class="hero">
+
+<h2>Rent or Buy Trendy Clothes</h2>
+<p>Look stylish without spending too much</p>
+
+<a href="login_page/login.html">
+<button>Get Started</button>
+</a>
+
+</section>
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function(){
+
+let email = localStorage.getItem("email");
+
+if(email){
+
+document.getElementById("loginLink").style.display="none";
+document.getElementById("signupLink").style.display="none";
+
+document.getElementById("welcomeUser").style.display="inline";
+document.getElementById("logoutBtn").style.display="inline";
+
+let username = email.split("@")[0];
+
+document.getElementById("welcomeUser").innerText = "Welcome, " + username;
+
+}
+
+});
+
+function logout(){
+
+localStorage.removeItem("loggedIn");
+localStorage.removeItem("email");
+localStorage.removeItem("password");
+
+alert("Logged out successfully");
+
+window.location.href="home.html";
+
+}
+
+</script>
+
+</body>
+</html>

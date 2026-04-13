@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Welcome Back | Shraddha Jain</title>
+    <link rel="stylesheet" href="login_style.css">
+</head>
+<body>
+
+<div class="container">
+
+    <!-- LEFT SIDE -->
+    <div class="left">
+        <div class="form-box">
+            <h2>Welcome back</h2>
+            <p class="subtitle">Please enter your details</p>
+
+            <input type="email" id="loginEmail" placeholder="Email address" required>
+            <input type="password" id="loginPassword" placeholder="Password" required>
+
+            <div class="options">
+                <label>
+                    <input type="checkbox"> Remember for 30 days
+                </label>
+                <a href="#">Forgot password?</a>
+            </div>
+
+            <button class="login-btn" onclick="login()">Sign in</button>
+
+            <div class="divider">
+                <span>OR</span>
+            </div>
+
+            <button class="google-btn">
+                <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png">
+                Sign in with Google
+            </button>
+
+            <p class="signup-text">
+                Don’t have an account?
+                <a href="../signup.html">Sign up</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- RIGHT SIDE -->
+    <div class="right">
+        <img src="../images/kurti1.png" alt="Login Illustration">
+    </div>
+
+</div>
+
+<script>
+function login(){
+    let email = document.getElementById("loginEmail").value;
+    let password = document.getElementById("loginPassword").value;
+
+    let storedEmail = localStorage.getItem("email");
+    let storedPassword = localStorage.getItem("password");
+
+    if(email === storedEmail && password === storedPassword){
+        alert("Login Successful!");
+        window.location.href = "../index.html";
+    } else {
+        alert("Invalid Credentials!");
+    }
+}
+</script>
+
+</body>
+</html>

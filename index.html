@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Cloth Market | Shraddha Jain</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="navbar">
+
+    <div class="logo">Cloth Market</div>
+
+    <!-- CATEGORIES -->
+    <div class="categories">
+        <span onclick="filterProducts('all')">All</span>
+        <span onclick="filterProducts('kurti')">Kurti</span>
+        <span onclick="filterProducts('lehenga')">Lehenga</span>
+        <span onclick="filterProducts('jacket')">Jacket</span>
+        <span onclick="filterProducts('jeans')">Jeans</span>
+        <span onclick="filterProducts('top')">Western Top</span>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search products..." onkeyup="searchProducts()">
+    </div>
+
+    <!-- USER ICONS -->
+    <div class="icons">
+
+        <a href="upload.html">Upload</a>
+
+        <a href="login_page/login.html" id="loginLink">Login</a>
+        <a href="signup_page/signup.html" id="signupLink">Signup</a>
+
+        <span id="welcomeUser" style="display:none;"></span>
+        <a href="#" id="logoutBtn" style="display:none;" onclick="logout()">Logout</a>
+
+        <span>🛒</span>
+
+    </div>
+
+</header>
+
+
+<!-- HERO -->
+<section class="hero">
+
+    <h1>Hello, I'm Shraddha 👋</h1>
+
+    <p>
+        Fashion Rental & Second-Hand Clothing Marketplace
+    </p>
+
+</section>
+
+
+<!-- ABOUT -->
+<section id="about" class="section">
+
+    <h2>About This Store</h2>
+
+    <p>
+        Welcome to Cloth Market. Here you can rent or buy second-hand
+        premium fashion outfits at affordable prices.
+    </p>
+
+</section>
+
+
+<!-- PRODUCTS -->
+<section id="products" class="products">
+
+</section>
+
+
+<!-- FOOTER -->
+<footer>
+
+    © 2026 Cloth Market | Designed by Shraddha Jain
+
+</footer>
+
+
+<script src="js/script.js"></script>
+
+
+<script>
+
+document.addEventListener("DOMContentLoaded", function(){
+
+    let userEmail = localStorage.getItem("email");
+
+    if(userEmail){
+
+        document.getElementById("loginLink").style.display="none";
+        document.getElementById("signupLink").style.display="none";
+
+        document.getElementById("welcomeUser").style.display="inline";
+        document.getElementById("logoutBtn").style.display="inline";
+
+        let username = userEmail.split("@")[0];
+
+        document.getElementById("welcomeUser").innerText="Welcome, " + username;
+    }
+
+});
+
+function logout(){
+
+    localStorage.removeItem("email");
+    localStorage.removeItem("password");
+
+    alert("Logged out successfully!");
+
+    window.location.reload();
+
+}
+
+</script>
+
+
+</body>
+</html>
