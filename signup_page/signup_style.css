@@ -5,7 +5,8 @@ body{
     display:flex;
     justify-content:center;
     align-items:center;
-    height:100vh;
+    min-height:100vh;
+    padding:12px;
 }
 
 .card{
@@ -50,9 +51,11 @@ button:hover{
 }
 
 .error{
-    color:red;
+    color:#cf2f4f;
     font-size:13px;
     text-align:left;
+    min-height:18px;
+    margin-top:4px;
 }
 
 .link{
@@ -71,4 +74,9 @@ button:hover{
     cursor:pointer;
     font-size:13px;
     color:#555;
+}
+
+button:disabled{
+    opacity:0.7;
+    cursor:not-allowed;
 }

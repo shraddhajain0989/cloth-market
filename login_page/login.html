@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <title>Welcome Back | Shraddha Jain</title>
     <link rel="stylesheet" href="login_style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body>
 
@@ -17,6 +18,12 @@
 
             <input type="email" id="loginEmail" placeholder="Email address" required>
             <input type="password" id="loginPassword" placeholder="Password" required>
+            <select id="loginRole">
+                <option value="auto">Auto detect role</option>
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+                <option value="master">Master</option>
+            </select>
 
             <div class="options">
                 <label>
@@ -26,6 +33,7 @@
             </div>
 
             <button class="login-btn" onclick="login()">Sign in</button>
+            <p class="error" id="loginError" role="alert" aria-live="polite"></p>
 
             <div class="divider">
                 <span>OR</span>
@@ -38,7 +46,7 @@
 
             <p class="signup-text">
                 Don’t have an account?
-                <a href="../signup.html">Sign up</a>
+                <a href="../signup_page/signup.html">Sign up</a>
             </p>
         </div>
     </div>
@@ -51,20 +59,123 @@
 </div>
 
 <script>
-function login(){
-    let email = document.getElementById("loginEmail").value;
-    let password = document.getElementById("loginPassword").value;
+const USERS_KEY = "users";
+const CURRENT_USER_KEY = "currentUser";
 
-    let storedEmail = localStorage.getItem("email");
-    let storedPassword = localStorage.getItem("password");
-
-    if(email === storedEmail && password === storedPassword){
-        alert("Login Successful!");
-        window.location.href = "../index.html";
-    } else {
-        alert("Invalid Credentials!");
+function getUsers() {
+    try {
+        return JSON.parse(localStorage.getItem(USERS_KEY)) || [];
+    } catch (error) {
+        console.error("Users parse error:", error);
+        return [];
     }
 }
+
+function saveUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function seedDefaultUsers() {
+    const users = getUsers();
+    const hasAdmin = users.some(user => user.email === "admin@example.com");
+    const hasMaster = users.some(user => user.email === "master@example.com");
+    if (hasAdmin && hasMaster) return;
+
+    const nextUsers = [...users];
+    if (!hasAdmin) {
+        nextUsers.push({
+            id: "u-admin-001",
+            name: "Admin User",
+            email: "admin@example.com",
+            password: btoa("Admin@123"),
+            role: "admin",
+            createdAt: new Date().toISOString()
+        });
+    }
+    if (!hasMaster) {
+        nextUsers.push({
+            id: "u-master-001",
+            name: "Master User",
+            email: "master@example.com",
+            password: btoa("Master@123"),
+            role: "master",
+            createdAt: new Date().toISOString()
+        });
+    }
+    saveUsers(nextUsers);
+}
+
+function migrateLegacyUser() {
+    const legacyEmail = localStorage.getItem("email");
+    const legacyPassword = localStorage.getItem("password");
+    if (!legacyEmail || !legacyPassword) return;
+
+    const users = getUsers();
+    const exists = users.some(user => user.email === legacyEmail.toLowerCase());
+    if (exists) return;
+
+    users.push({
+        id: `u-legacy-${Date.now()}`,
+        name: legacyEmail.split("@")[0],
+        email: legacyEmail.toLowerCase(),
+        password: btoa(legacyPassword),
+        role: "user",
+        createdAt: new Date().toISOString()
+    });
+    saveUsers(users);
+}
+
+function login(){
+    const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+    const password = document.getElementById("loginPassword").value;
+    const selectedRole = document.getElementById("loginRole").value;
+    const error = document.getElementById("loginError");
+    error.innerText = "";
+
+    if (!email || !password) {
+        error.innerText = "Please enter email and password.";
+        return;
+    }
+
+    const users = getUsers();
+    const user = users.find(candidate => candidate.email === email);
+    if (!user) {
+        error.innerText = "No account found for this email.";
+        return;
+    }
+
+    if (user.password !== btoa(password)) {
+        error.innerText = "Incorrect password.";
+        return;
+    }
+
+    if (selectedRole !== "auto" && user.role !== selectedRole) {
+        error.innerText = `This account is registered as ${user.role}, not ${selectedRole}.`;
+        return;
+    }
+
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+    }));
+
+    localStorage.setItem("loggedIn", "true");
+    localStorage.setItem("email", user.email);
+
+    alert(`Login successful as ${user.role}.`);
+    if (user.role === "admin" || user.role === "master") {
+        window.location.href = "../admin_panel.html";
+        return;
+    }
+    window.location.href = "../index.html";
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+    seedDefaultUsers();
+    migrateLegacyUser();
+});
 </script>
 
 </body>

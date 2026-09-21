@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel | Cloth Market</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+<header class="admin-nav">
+    <a href="index.html">Back to Store</a>
+    <h1>Admin Dashboard</h1>
+    <button id="logoutBtn" type="button">Logout</button>
+</header>
+
+<main class="admin-wrap">
+    <aside class="tabs">
+        <button class="tab-btn active" data-tab="products">Product Management</button>
+        <button class="tab-btn" data-tab="users" id="usersTab">User Management</button>
+        <button class="tab-btn" data-tab="analytics">Analytics</button>
+        <button class="tab-btn" data-tab="settings" id="settingsTab">System Settings</button>
+    </aside>
+
+    <section class="tab-content active" id="productsTab">
+        <h2>Products</h2>
+        <form id="productForm" class="panel-form">
+            <input type="hidden" id="productId">
+            <input type="text" id="productName" placeholder="Product Name" required>
+            <input type="text" id="productCategory" placeholder="Category" required>
+            <input type="number" id="productPrice" placeholder="Price" required>
+            <input type="number" id="productRent" placeholder="Rent per day" required>
+            <input type="text" id="productSize" placeholder="Size" required>
+            <label><input type="checkbox" id="productAvailable" checked> Available</label>
+            <input type="text" id="productBadge" placeholder="Badge">
+            <input type="text" id="productImage" placeholder="Image URL (e.g., images/jacket1.jpg)" required>
+            <textarea id="productDescription" placeholder="Description" rows="3" required></textarea>
+            <div class="actions">
+                <button type="submit">Save Product</button>
+                <button type="button" id="resetForm">Reset</button>
+            </div>
+        </form>
+
+        <div id="productsTable"></div>
+    </section>
+
+    <section class="tab-content" id="usersTabContent">
+        <h2>Users</h2>
+        <p id="usersHint"></p>
+        <div id="usersTable"></div>
+    </section>
+
+    <section class="tab-content" id="analyticsTab">
+        <h2>Analytics</h2>
+        <div class="analytics-grid">
+            <article><h3 id="totalUsers">0</h3><p>Total Users</p></article>
+            <article><h3 id="totalProducts">0</h3><p>Total Products</p></article>
+            <article><h3 id="totalOrders">0</h3><p>Total Orders</p></article>
+            <article><h3 id="totalSubscribers">0</h3><p>Newsletter Subscribers</p></article>
+        </div>
+    </section>
+
+    <section class="tab-content" id="settingsTabContent">
+        <h2>System Settings</h2>
+        <p id="settingsHint"></p>
+        <form id="settingsForm" class="panel-form">
+            <label><input type="checkbox" id="maintenanceMode"> Maintenance Mode</label>
+            <label><input type="checkbox" id="allowRentals" checked> Allow Rentals</label>
+            <div class="actions"><button type="submit">Save Settings</button></div>
+        </form>
+    </section>
+</main>
+
+<script src="js/admin.js"></script>
+</body>
+</html>

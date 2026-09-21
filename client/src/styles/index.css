@@ -1,0 +1,212 @@
+/* ── Fonts (Must come before @tailwind in CSS specification) ── */
+@import url("https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap");
+@import url("https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Root ────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --cm-black:  #111111;
+  --cm-white:  #ffffff;
+  --cm-soft:   #fafafa;
+  --cm-text:   #1a1a1a;
+  --cm-muted:  #777777;
+  --cm-border: #ececec;
+  --cm-red:    #d62828;
+  --nav-height: 64px;
+  --announce-height: 40px;
+}
+
+/* ── Base Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: #ffffff;
+  color: var(--cm-text);
+  font-family: "Satoshi", "Inter", "Manrope", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── Lenis Smooth Scroll ────────────────────────────────────── */
+html.lenis, html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--cm-border); border-radius: 100px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cm-muted); }
+
+/* ── Typography ─────────────────────────────────────────────── */
+.font-display {
+  font-family: "Clash Display", "Space Grotesk", sans-serif;
+  letter-spacing: -0.02em;
+}
+
+h1, h2, h3 { line-height: 1.1; letter-spacing: -0.02em; }
+
+/* ── Forms Reset ────────────────────────────────────────────── */
+button, input, select, textarea { font: inherit; }
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--cm-black) !important;
+}
+
+/* ── Component Classes ───────────────────────────────────────── */
+@layer components {
+  .skeleton {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%);
+    background-size: 600px 100%;
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  /* ── Glass morphism ──────────────────────────────────────── */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid rgba(236, 236, 236, 0.8);
+  }
+
+  /* ── Premium button base ─────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 100px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    letter-spacing: 0.01em;
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    white-space: nowrap;
+    border: none;
+  }
+  .btn-primary {
+    background: var(--cm-black);
+    color: #fff;
+    padding: 0.75rem 1.75rem;
+  }
+  .btn-primary:hover {
+    background: #333;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--cm-black);
+    padding: 0.75rem 1.75rem;
+    border: 1.5px solid var(--cm-border);
+  }
+  .btn-secondary:hover {
+    border-color: var(--cm-black);
+    transform: translateY(-1px);
+  }
+  .btn-red {
+    background: var(--cm-red);
+    color: #fff;
+    padding: 0.75rem 1.75rem;
+  }
+  .btn-red:hover {
+    background: #b71c1c;
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(214, 40, 40, 0.3);
+  }
+
+  /* ── Badge ───────────────────────────────────────────────── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.25rem 0.625rem;
+    border-radius: 100px;
+  }
+  .badge-new       { background: #111; color: #fff; }
+  .badge-trending  { background: #111; color: #fff; }
+  .badge-limited   { background: var(--cm-red); color: #fff; }
+  .badge-sale      { background: var(--cm-red); color: #fff; }
+  .badge-hot       { background: #ff6b35; color: #fff; }
+  .badge-rent      { background: #f0f0f0; color: #111; }
+
+  /* ── Card ────────────────────────────────────────────────── */
+  .cm-card {
+    background: #fff;
+    border: 1px solid var(--cm-border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .cm-card:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.06), 0 20px 60px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+  }
+
+  /* ── Section ─────────────────────────────────────────────── */
+  .cm-section {
+    padding: 5rem 0;
+  }
+  .cm-container {
+    width: 100%;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+  @media (min-width: 640px)  { .cm-container { padding: 0 2rem; } }
+  @media (min-width: 1024px) { .cm-container { padding: 0 3rem; } }
+
+  /* ── Horizontal scroll (drag) ────────────────────────────── */
+  .drag-scroll {
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    cursor: grab;
+    scrollbar-width: none;
+  }
+  .drag-scroll::-webkit-scrollbar { display: none; }
+  .drag-scroll:active { cursor: grabbing; }
+
+  /* ── Text reveal ─────────────────────────────────────────── */
+  .reveal-word {
+    display: inline-block;
+    overflow: hidden;
+  }
+  .reveal-word span {
+    display: inline-block;
+  }
+}
+
+/* ── Utility Classes ─────────────────────────────────────────── */
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .text-pretty  { text-wrap: pretty; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+  .magnetic { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+}

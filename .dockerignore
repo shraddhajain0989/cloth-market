@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+server/node_modules
+client/node_modules
+
+# Build output
+client/dist
+server/dist
+
+# Environment files (never bake secrets into image)
+.env
+.env.*
+server/.env
+client/.env
+
+# Dev/test files
+coverage
+*.log
+*.test.js
+
+# OS/IDE
+.DS_Store
+.vscode
+.idea
+
+# Git
+.git
+.gitignore

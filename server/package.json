@@ -1,0 +1,31 @@
+{
+  "name": "cloth-market-server",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "seed": "node src/data/dbSeed.js",
+    "build": "node -e \"console.log('Server build step completed')\"",
+    "test": "node --test",
+    "lint": "node -e \"console.log('No server lint configured yet')\""
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.14.2",
+    "morgan": "^1.10.0",
+    "multer": "^2.2.0",
+    "nanoid": "^5.1.5",
+    "resend": "^6.18.0",
+    "zod": "^3.24.4"
+  }
+}

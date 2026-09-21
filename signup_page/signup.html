@@ -3,25 +3,29 @@
 <head>
     <title>Signup</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="signup_style.css">
 </head>
 <body>
 
 <div class="card">
     <h2>Create Account</h2>
 
+    <input type="text" id="signupName" placeholder="Enter Full Name">
     <input type="email" id="signupEmail" placeholder="Enter Email">
 
     <div class="toggle">
         <input type="password" id="signupPassword" placeholder="Enter Password">
-        <span onclick="togglePassword()">Show</span>
+        <span onclick="togglePassword('signupPassword', this)">Show</span>
     </div>
 
-    <input type="password" id="confirmPassword" placeholder="Confirm Password">
+    <div class="toggle">
+        <input type="password" id="confirmPassword" placeholder="Confirm Password">
+        <span onclick="togglePassword('confirmPassword', this)">Show</span>
+    </div>
 
-    <div class="error" id="errorMsg"></div>
+    <div class="error" id="errorMsg" role="alert" aria-live="polite"></div>
 
-    <button onclick="signup()">Signup</button>
+    <button id="signupBtn" onclick="signup()">Signup</button>
 
     <p class="link">
         Already have account? 
@@ -30,41 +34,126 @@
 </div>
 
 <script>
-function togglePassword(){
-    let pass = document.getElementById("signupPassword");
+const USERS_KEY = "users";
+
+function getUsers() {
+    try {
+        return JSON.parse(localStorage.getItem(USERS_KEY)) || [];
+    } catch (error) {
+        console.error("Failed to parse users:", error);
+        return [];
+    }
+}
+
+function saveUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+}
+
+function seedDefaultUsers() {
+    const users = getUsers();
+    const hasAdmin = users.some(user => user.email === "admin@example.com");
+    const hasMaster = users.some(user => user.email === "master@example.com");
+    if (hasAdmin && hasMaster) return;
+
+    const nextUsers = [...users];
+    const seeds = [
+        {
+            id: "u-admin-001",
+            name: "Admin User",
+            email: "admin@example.com",
+            password: btoa("Admin@123"),
+            role: "admin",
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: "u-master-001",
+            name: "Master User",
+            email: "master@example.com",
+            password: btoa("Master@123"),
+            role: "master",
+            createdAt: new Date().toISOString()
+        }
+    ];
+    if (!hasAdmin) nextUsers.push(seeds[0]);
+    if (!hasMaster) nextUsers.push(seeds[1]);
+    saveUsers(nextUsers);
+}
+
+function togglePassword(inputId, trigger) {
+    const pass = document.getElementById(inputId);
     pass.type = pass.type === "password" ? "text" : "password";
+    trigger.innerText = pass.type === "password" ? "Show" : "Hide";
+}
+
+function validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function validatePassword(password) {
+    return {
+        ok: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z\d]).{8,}$/.test(password),
+        message: "Password must be 8+ chars with uppercase, lowercase, number, and symbol."
+    };
 }
 
 function signup(){
-    let email = document.getElementById("signupEmail").value.trim();
-    let password = document.getElementById("signupPassword").value;
-    let confirmPassword = document.getElementById("confirmPassword").value;
-    let error = document.getElementById("errorMsg");
+    const name = document.getElementById("signupName").value.trim();
+    const email = document.getElementById("signupEmail").value.trim().toLowerCase();
+    const password = document.getElementById("signupPassword").value;
+    const confirmPassword = document.getElementById("confirmPassword").value;
+    const error = document.getElementById("errorMsg");
+    const btn = document.getElementById("signupBtn");
 
-    error.innerHTML = "";
+    error.innerText = "";
 
-    if(email === "" || password === "" || confirmPassword === ""){
-        error.innerHTML = "All fields are required!";
+    if(name.length < 2) {
+        error.innerText = "Please enter your full name.";
         return;
     }
 
-    if(password.length < 8){
-        error.innerHTML = "Password must be at least 8 characters!";
+    if (!validateEmail(email)) {
+        error.innerText = "Please enter a valid email address.";
         return;
     }
 
-    if(password !== confirmPassword){
-        error.innerHTML = "Passwords do not match!";
+    const passValidation = validatePassword(password);
+    if (!passValidation.ok) {
+        error.innerText = passValidation.message;
         return;
     }
 
-    localStorage.setItem("email", email);
-    localStorage.setItem("password", btoa(password));
+    if(password !== confirmPassword) {
+        error.innerText = "Passwords do not match.";
+        return;
+    }
 
-    alert("Signup Successful!");
+    const users = getUsers();
+    const duplicate = users.find(user => user.email.toLowerCase() === email);
+    if (duplicate) {
+        error.innerText = "This email is already registered.";
+        return;
+    }
 
-    window.location.href = "../index.html";
+    const newUser = {
+        id: `u-${Date.now()}`,
+        name,
+        email,
+        password: btoa(password),
+        role: "user",
+        createdAt: new Date().toISOString()
+    };
+
+    users.push(newUser);
+    saveUsers(users);
+    btn.disabled = true;
+    btn.innerText = "Creating account...";
+    console.log("User signed up:", newUser.email);
+
+    alert("Signup successful! Please login.");
+    window.location.href = "../login_page/login.html";
 }
+
+document.addEventListener("DOMContentLoaded", seedDefaultUsers);
 </script>
 
 </body>

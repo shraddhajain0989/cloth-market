@@ -1,128 +1,172 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <title>Cloth Market | Shraddha Jain</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloth Market | Discover Fashion</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
-
 <body>
-
-<!-- HEADER -->
 <header class="navbar">
+    <a href="home.html" class="logo">Cloth Market</a>
 
-    <div class="logo">Cloth Market</div>
-
-    <!-- CATEGORIES -->
-    <div class="categories">
-        <span onclick="filterProducts('all')">All</span>
-        <span onclick="filterProducts('kurti')">Kurti</span>
-        <span onclick="filterProducts('lehenga')">Lehenga</span>
-        <span onclick="filterProducts('jacket')">Jacket</span>
-        <span onclick="filterProducts('jeans')">Jeans</span>
-        <span onclick="filterProducts('top')">Western Top</span>
-    </div>
-
-    <!-- SEARCH -->
     <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Search products..." onkeyup="searchProducts()">
+        <input type="text" id="searchInput" placeholder="Search products, categories...">
     </div>
 
-    <!-- USER ICONS -->
-    <div class="icons">
-
-        <a href="upload.html">Upload</a>
-
+    <nav class="icons">
         <a href="login_page/login.html" id="loginLink">Login</a>
         <a href="signup_page/signup.html" id="signupLink">Signup</a>
-
-        <span id="welcomeUser" style="display:none;"></span>
-        <a href="#" id="logoutBtn" style="display:none;" onclick="logout()">Logout</a>
-
-        <span>🛒</span>
-
-    </div>
-
+        <a href="user_profile.html" id="profileLink" class="hidden">Profile</a>
+        <a href="admin_panel.html" id="adminPanelLink" class="hidden">Admin Panel</a>
+        <button id="darkToggle" class="ghost-btn" type="button">Dark</button>
+        <button id="cartButton" class="ghost-btn" type="button">Cart (<span id="cart-count">0</span>)</button>
+        <span id="welcomeUser" class="welcome-user hidden"></span>
+        <button id="logoutBtn" class="ghost-btn danger hidden" type="button">Logout</button>
+    </nav>
 </header>
 
-
-<!-- HERO -->
-<section class="hero">
-
-    <h1>Hello, I'm Shraddha 👋</h1>
-
-    <p>
-        Fashion Rental & Second-Hand Clothing Marketplace
-    </p>
-
+<section class="hero modern-hero">
+    <div class="hero-track" id="heroTrack">
+        <article class="hero-slide active" data-bg="linear-gradient(120deg, #f857a6 0%, #ff5858 100%)">
+            <h1>Wear Trend. Own Style.</h1>
+            <p>Shop or rent standout outfits curated for every mood.</p>
+            <button type="button" onclick="scrollToProducts()">Explore Collection</button>
+        </article>
+        <article class="hero-slide" data-bg="linear-gradient(120deg, #4facfe 0%, #00f2fe 100%)">
+            <h1>Trending Looks, Daily</h1>
+            <p>Fresh arrivals and favorites from the Cloth Market community.</p>
+            <button type="button" onclick="showTrending()">View Trending</button>
+        </article>
+        <article class="hero-slide" data-bg="linear-gradient(120deg, #43e97b 0%, #38f9d7 100%)">
+            <h1>Try. Love. Repeat.</h1>
+            <p>Virtual Try-On feature is coming soon. Stay tuned.</p>
+            <button type="button" onclick="openTryOnPlaceholder()">Virtual Try-On</button>
+        </article>
+    </div>
+    <div class="hero-controls">
+        <button type="button" onclick="changeHeroSlide(-1)">Prev</button>
+        <button type="button" onclick="changeHeroSlide(1)">Next</button>
+    </div>
 </section>
 
-
-<!-- ABOUT -->
-<section id="about" class="section">
-
-    <h2>About This Store</h2>
-
-    <p>
-        Welcome to Cloth Market. Here you can rent or buy second-hand
-        premium fashion outfits at affordable prices.
-    </p>
-
+<section class="section" id="trendingSection">
+    <h2>Trending Now</h2>
+    <p class="section-sub">Most loved by shoppers this week.</p>
+    <div id="trendingProducts" class="trending-grid"></div>
 </section>
 
+<section class="filter-panel">
+    <div class="filter-group">
+        <label for="categoryFilter">Category</label>
+        <select id="categoryFilter">
+            <option value="all">All</option>
+            <option value="jacket">Jacket</option>
+            <option value="kurti">Kurti</option>
+            <option value="shirt">Shirt</option>
+            <option value="top">Top</option>
+            <option value="footwear">Footwear</option>
+        </select>
+    </div>
 
-<!-- PRODUCTS -->
-<section id="products" class="products">
+    <div class="filter-group">
+        <label for="sizeFilter">Size</label>
+        <select id="sizeFilter">
+            <option value="all">All</option>
+            <option value="XS">XS</option>
+            <option value="S">S</option>
+            <option value="M">M</option>
+            <option value="L">L</option>
+            <option value="XL">XL</option>
+        </select>
+    </div>
 
+    <div class="filter-group">
+        <label for="priceFilter">Price Range</label>
+        <select id="priceFilter">
+            <option value="all">All</option>
+            <option value="0-700">0 - 700</option>
+            <option value="701-1200">701 - 1200</option>
+            <option value="1201-2500">1201 - 2500</option>
+        </select>
+    </div>
+
+    <div class="filter-group check-group">
+        <label>
+            <input type="checkbox" id="availableOnly"> In stock only
+        </label>
+    </div>
+
+    <button type="button" class="ghost-btn" onclick="resetFilters()">Reset Filters</button>
 </section>
 
+<section id="products" class="products"></section>
 
-<!-- FOOTER -->
-<footer>
+<section class="section newsletter" id="newsletterSection">
+    <h2>Join The Newsletter</h2>
+    <p class="section-sub">Get drops, discounts, and styling tips in your inbox.</p>
+    <div class="newsletter-form">
+        <input type="email" id="newsletterEmail" placeholder="Enter your email">
+        <button type="button" onclick="subscribeNewsletter()">Subscribe</button>
+    </div>
+</section>
 
-    © 2026 Cloth Market | Designed by Shraddha Jain
-
+<footer class="main-footer">
+    <div>
+        <h3>Cloth Market</h3>
+        <p>Contact: support@clothmarket.com</p>
+        <p>Phone: +91 99876 54321</p>
+    </div>
+    <div>
+        <h4>Social</h4>
+        <div class="social-links">
+            <a href="#" aria-label="Instagram">Instagram</a>
+            <a href="#" aria-label="X">X</a>
+            <a href="#" aria-label="Pinterest">Pinterest</a>
+        </div>
+    </div>
 </footer>
 
+<div class="modal hidden" id="productModal">
+    <div class="modal-content">
+        <button class="close-btn" type="button" onclick="closeProductModal()">X</button>
+        <div id="modalBody"></div>
+    </div>
+</div>
+
+<div class="modal hidden" id="cartModal">
+    <div class="modal-content cart-content">
+        <button class="close-btn" type="button" onclick="toggleCart(false)">X</button>
+        <h3>Your Cart</h3>
+        <div id="cartItems"></div>
+        <p id="cartTotal"></p>
+        <button type="button" onclick="checkoutCart()">Checkout</button>
+    </div>
+</div>
+
+<div class="popup" id="rentPopup">
+    <div class="popup-content">
+        <h3>Rent Product</h3>
+        <p>Number of Days</p>
+        <input type="number" id="rentDays" min="1" value="1">
+        <p>Total Rent: ₹<span id="rentTotal">0</span></p>
+        <button type="button" onclick="confirmRent()">Confirm Rent</button>
+        <button type="button" onclick="closePopup()">Cancel</button>
+    </div>
+</div>
+
+<div class="chat-widget" id="chatWidget">
+    <button type="button" class="chat-toggle" onclick="toggleChat()">Chat</button>
+    <div class="chat-box hidden" id="chatBox">
+        <h4>Style Assistant</h4>
+        <p id="chatResponse">Hi! Ask me for outfit recommendations.</p>
+        <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="e.g. party look under 1000">
+            <button type="button" onclick="sendChatPrompt()">Send</button>
+        </div>
+    </div>
+</div>
 
 <script src="js/script.js"></script>
-
-
-<script>
-
-document.addEventListener("DOMContentLoaded", function(){
-
-    let userEmail = localStorage.getItem("email");
-
-    if(userEmail){
-
-        document.getElementById("loginLink").style.display="none";
-        document.getElementById("signupLink").style.display="none";
-
-        document.getElementById("welcomeUser").style.display="inline";
-        document.getElementById("logoutBtn").style.display="inline";
-
-        let username = userEmail.split("@")[0];
-
-        document.getElementById("welcomeUser").innerText="Welcome, " + username;
-    }
-
-});
-
-function logout(){
-
-    localStorage.removeItem("email");
-    localStorage.removeItem("password");
-
-    alert("Logged out successfully!");
-
-    window.location.reload();
-
-}
-
-</script>
-
-
 </body>
 </html>

@@ -1,84 +1,85 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-
-<title>FitCheck - Home</title>
-<link rel="stylesheet" href="css/style.css">
-
-<script>
-document.addEventListener("DOMContentLoaded", function(){
-
-    let isLoggedIn = localStorage.getItem("loggedIn");
-
-    if(isLoggedIn !== "true"){
-        window.location.href = "home.html";
-    }
-
-});
-</script>
-
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloth Market | Home</title>
+    <link rel="stylesheet" href="css/style.css">
 </head>
-
 <body>
-
-<header>
-    <h1>FitCheck</h1>
-
-    <nav>
+<header class="navbar">
+    <a href="home.html" class="logo">Cloth Market</a>
+    <div class="search-box">
+        <input type="text" value="Style starts here" readonly>
+    </div>
+    <nav class="icons">
+        <a href="index.html">Shop</a>
         <a href="login_page/login.html" id="loginLink">Login</a>
         <a href="signup_page/signup.html" id="signupLink">Signup</a>
-
-        <span id="welcomeUser" style="display:none;"></span>
-        <a href="#" id="logoutBtn" style="display:none;" onclick="logout()">Logout</a>
+        <a href="user_profile.html" id="profileLink" class="hidden">Profile</a>
+        <a href="admin_panel.html" id="adminPanelLink" class="hidden">Admin Panel</a>
+        <button id="darkToggle" class="ghost-btn" type="button">Dark</button>
+        <span id="welcomeUser" class="welcome-user hidden"></span>
+        <button id="logoutBtn" class="ghost-btn danger hidden" type="button" onclick="logout()">Logout</button>
     </nav>
 </header>
 
-<section class="hero">
+<main id="homePageMarker">
+    <section class="hero modern-hero">
+        <div class="hero-track" style="background: linear-gradient(120deg, #fe8c00 0%, #f83600 100%);">
+            <article class="hero-slide active">
+                <h1>Rent Smart. Shop Bold.</h1>
+                <p>Cloth Market brings premium looks to your wardrobe without the premium pressure.</p>
+                <button type="button" onclick="window.location.href='index.html'">Start Shopping</button>
+            </article>
+        </div>
+    </section>
 
-<h2>Rent or Buy Trendy Clothes</h2>
-<p>Look stylish without spending too much</p>
+    <section class="section">
+        <h2>Why Cloth Market</h2>
+        <p class="section-sub">Buy, rent, favorite, and discover curated drops in one clean experience.</p>
+        <div class="trending-grid">
+            <article class="trending-card">
+                <h4>Daily New Arrivals</h4>
+                <p>Our catalog updates regularly with trend-first picks.</p>
+            </article>
+            <article class="trending-card">
+                <h4>Role-Based Experience</h4>
+                <p>Users, Admins, and Master accounts each get focused controls.</p>
+            </article>
+            <article class="trending-card">
+                <h4>Wishlist + Reviews</h4>
+                <p>Save favorites and share product feedback with ratings.</p>
+            </article>
+        </div>
+    </section>
 
-<a href="login_page/login.html">
-<button>Get Started</button>
-</a>
+    <section class="section newsletter">
+        <h2>Get Member-Only Deals</h2>
+        <p class="section-sub">Subscribe for special drops and resale alerts.</p>
+        <div class="newsletter-form">
+            <input type="email" id="newsletterEmail" placeholder="Enter your email">
+            <button type="button" onclick="subscribeNewsletter()">Subscribe</button>
+        </div>
+    </section>
+</main>
 
-</section>
+<footer class="main-footer">
+    <div>
+        <h3>Contact</h3>
+        <p>Email: support@clothmarket.com</p>
+        <p>Phone: +91 99876 54321</p>
+    </div>
+    <div>
+        <h4>Follow</h4>
+        <div class="social-links">
+            <a href="#">Instagram</a>
+            <a href="#">X</a>
+            <a href="#">Pinterest</a>
+        </div>
+    </div>
+</footer>
 
-<script>
-
-document.addEventListener("DOMContentLoaded", function(){
-
-let email = localStorage.getItem("email");
-
-if(email){
-
-document.getElementById("loginLink").style.display="none";
-document.getElementById("signupLink").style.display="none";
-
-document.getElementById("welcomeUser").style.display="inline";
-document.getElementById("logoutBtn").style.display="inline";
-
-let username = email.split("@")[0];
-
-document.getElementById("welcomeUser").innerText = "Welcome, " + username;
-
-}
-
-});
-
-function logout(){
-
-localStorage.removeItem("loggedIn");
-localStorage.removeItem("email");
-localStorage.removeItem("password");
-
-alert("Logged out successfully");
-
-window.location.href="home.html";
-
-}
-
-</script>
-
+<script src="js/script.js"></script>
 </body>
 </html>
