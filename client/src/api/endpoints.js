@@ -39,12 +39,25 @@ export const orderApi = {
 
 export const rentalApi = {
   list: () => api.get("/rentals"),
+  get: (id) => api.get(`/rentals/${id}`),
   create: (payload) => api.post("/rentals", payload),
+  checkAvailability: (params) => api.get("/rentals/check-availability", { params }),
+  acknowledgeHandover: (id) => api.post(`/rentals/${id}/acknowledge-handover`),
+  requestExtension: (id, payload) => api.post(`/rentals/${id}/request-extension`, payload),
   plans: () => api.get("/rentals/plans")
 };
 
 export const adminApi = {
-  dashboard: () => api.get("/admin/dashboard")
+  dashboard: () => api.get("/admin/dashboard"),
+  rentals: (params) => api.get("/admin/rentals", { params }),
+  confirmAdvance: (id) => api.patch(`/admin/rentals/${id}/advance`),
+  handoverInspection: (id, payload) => api.post(`/admin/rentals/${id}/handover-inspection`, payload),
+  recordRemainingPayment: (id) => api.patch(`/admin/rentals/${id}/remaining-payment`),
+  reviewExtension: (id, payload) => api.patch(`/admin/rentals/${id}/extension`, payload),
+  returnInspection: (id, payload) => api.post(`/admin/rentals/${id}/return-inspection`, payload),
+  reportDamage: (id, payload) => api.post(`/admin/rentals/${id}/damage`, payload),
+  resolveDamage: (id) => api.patch(`/admin/rentals/${id}/damage/resolve`),
+  completeRental: (id) => api.patch(`/admin/rentals/${id}/complete`)
 };
 
 export const socialApi = {

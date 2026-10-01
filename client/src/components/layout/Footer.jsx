@@ -58,7 +58,7 @@ export default function Footer() {
             </div>
             <div>
               <h4 className="font-semibold text-sm">Seamless Rentals</h4>
-              <p className="text-xs text-cm-muted mt-1">Flexi-rental durations, security deposit refund guarantee.</p>
+              <p className="text-xs text-cm-muted mt-1">Flexi-rental durations, ₹50 confirmation advance, cash on delivery.</p>
             </div>
           </div>
           <div className="flex items-start gap-4">

@@ -7,7 +7,7 @@ const RENTAL_STEPS = [
     step: "01",
     icon: Calendar,
     title: "Pick Dates & Rent",
-    desc: "Choose a 3, 7, or 14-day rental window. Pay a fraction of the retail price with refundable deposit."
+    desc: "Choose your dates. Pay only ₹50 advance to confirm, with remaining amount payable upon handover."
   },
   {
     step: "02",
@@ -19,7 +19,7 @@ const RENTAL_STEPS = [
     step: "03",
     icon: RotateCcw,
     title: "Easy Doorstep Return",
-    desc: "Place the item back in the reusable bag. Our agent picks it up free of cost, and deposit is refunded instantly."
+    desc: "Admin completes return inspection with photos. Doorstep pickup with zero hassle."
   }
 ];
 

@@ -12,6 +12,9 @@ export async function requireAuth(req, res, next) {
     const payload = jwt.verify(token, env.jwtSecret);
     const user = await User.findById(payload.sub);
     if (!user) return fail(res, 401, "User not found.");
+    if (user.status === "disabled") {
+      return fail(res, 403, "Your account has been disabled. Contact Master Admin.");
+    }
     req.user = user;
     next();
   } catch {
@@ -21,7 +24,12 @@ export async function requireAuth(req, res, next) {
 
 export function requireRole(...roles) {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+    if (!req.user) {
+      return fail(res, 401, "Authentication required.");
+    }
+    const userRole = req.user.role;
+    const hasRole = roles.includes(userRole) || (roles.includes("admin") && userRole === "master");
+    if (!hasRole) {
       return fail(res, 403, "You do not have permission for this action.");
     }
     next();

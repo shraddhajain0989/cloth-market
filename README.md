@@ -21,12 +21,6 @@ Cloth Market has been upgraded from a static localStorage fashion storefront int
 2. `npm run dev:server`
 3. `npm run dev:client`
 
-## Demo Accounts
-
-- `user@example.com / User@123`
-- `admin@example.com / Admin@123`
-- `master@example.com / Master@123`
-
 ## Current Architecture Note
 
 The new backend currently runs with an in-memory development store so the migrated product can run without external infrastructure in this repo. MongoDB Atlas, Cloudinary, Stripe, Razorpay, and Google auth are scaffolded through environment variables and modular endpoints for the next hardening pass.

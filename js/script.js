@@ -105,33 +105,7 @@ function safeWrite(key, value) {
 }
 
 function seedDefaultUsers() {
-    const users = safeRead(STORAGE_KEYS.users, []);
-    const hasAdmin = users.some(user => user.email === "admin@example.com");
-    const hasMaster = users.some(user => user.email === "master@example.com");
-    if (hasAdmin && hasMaster) return;
-
-    const nextUsers = [...users];
-    if (!hasAdmin) {
-        nextUsers.push({
-            id: "u-admin-001",
-            name: "Admin User",
-            email: "admin@example.com",
-            password: btoa("Admin@123"),
-            role: "admin",
-            createdAt: new Date().toISOString()
-        });
-    }
-    if (!hasMaster) {
-        nextUsers.push({
-            id: "u-master-001",
-            name: "Master User",
-            email: "master@example.com",
-            password: btoa("Master@123"),
-            role: "master",
-            createdAt: new Date().toISOString()
-        });
-    }
-    safeWrite(STORAGE_KEYS.users, nextUsers);
+    // No hardcoded demo accounts seeded in production
 }
 
 function migrateLegacyUser() {

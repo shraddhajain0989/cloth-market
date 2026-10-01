@@ -30,6 +30,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     role: { type: String, enum: ["user", "admin", "master"], default: "user" },
+    status: { type: String, enum: ["active", "disabled"], default: "active" },
     verified: { type: Boolean, default: false },
     avatar: String,
     loyaltyPoints: { type: Number, default: 0 },

@@ -148,9 +148,9 @@ export async function placeOrder(req, res) {
     }
   }
 
-  const tax = Math.round(subtotal * 0.08);
+  const tax = 0; // Tax completely removed
   const deliveryFee = subtotal > 1499 ? 0 : 99;
-  const total = Math.max(0, subtotal + tax + deliveryFee - discount);
+  const total = Math.max(0, subtotal + deliveryFee - discount);
 
   // Validate Shipping Address
   const shippingAddress = req.body.shippingAddress || (user.addresses && user.addresses[0]);
@@ -182,18 +182,18 @@ export async function placeOrder(req, res) {
     decrementedItems.push(item);
   }
 
-  // Create Order
+  // Create Order (Cash on Delivery only)
   const order = await Order.create({
     userId: user.id,
     items: verifiedItems,
     couponCode: coupon?.code,
     subtotal,
-    tax,
+    tax: 0,
     deliveryFee,
     discount,
     total,
     status: "Processing",
-    paymentMethod: req.body.paymentMethod || "cod",
+    paymentMethod: "COD",
     paymentProviderStatus: "pending",
     trackingStatus: "Order placed",
     shippingAddress

@@ -11,6 +11,7 @@ import { notFound } from "./middleware/not-found.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import masterAdminRoutes from "./routes/masterAdminRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import rentalRoutes from "./routes/rentalRoutes.js";
@@ -40,6 +41,7 @@ export function createApp() {
   app.use(express.json({ limit: "2mb" }));
   app.use(cookieParser());
   app.use(morgan("dev"));
+  app.use("/uploads", express.static("public/uploads"));
 
   // Liveness check
   app.get("/api/health", (_req, res) => {
@@ -69,6 +71,7 @@ export function createApp() {
   app.use("/api/orders", orderRoutes);
   app.use("/api/rentals", rentalRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/master-admin", masterAdminRoutes);
   app.use("/api/social", socialRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/upload", uploadRoutes);

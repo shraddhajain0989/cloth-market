@@ -137,7 +137,6 @@ export async function sendOrderConfirmationEmail(to, name, order) {
     </table>
     <table width="100%" cellpadding="0" cellspacing="0">
       <tr><td style="color:#64748b;font-size:14px;padding:4px 0;">Subtotal</td><td style="text-align:right;color:#334155;font-size:14px;">₹${order.subtotal}</td></tr>
-      <tr><td style="color:#64748b;font-size:14px;padding:4px 0;">Tax (8%)</td><td style="text-align:right;color:#334155;font-size:14px;">₹${order.tax}</td></tr>
       <tr><td style="color:#64748b;font-size:14px;padding:4px 0;">Delivery</td><td style="text-align:right;color:#334155;font-size:14px;">₹${order.deliveryFee}</td></tr>
       ${order.discount ? `<tr><td style="color:#22c55e;font-size:14px;padding:4px 0;">Discount</td><td style="text-align:right;color:#22c55e;font-size:14px;">-₹${order.discount}</td></tr>` : ""}
       <tr><td style="color:#0f172a;font-size:16px;font-weight:700;padding:12px 0 0;border-top:2px solid #e2e8f0;">Total</td><td style="text-align:right;color:#0f172a;font-size:16px;font-weight:700;padding:12px 0 0;border-top:2px solid #e2e8f0;">₹${order.total}</td></tr>

@@ -28,9 +28,3 @@
 - `POST /ai/outfit-generator`
 - `POST /ai/chat`
 - `POST /ai/size-recommendation`
-
-## Demo Credentials
-
-- User: `user@example.com / User@123`
-- Admin: `admin@example.com / Admin@123`
-- Master: `master@example.com / Master@123`

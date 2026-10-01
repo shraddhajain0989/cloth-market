@@ -1,5 +1,6 @@
 import { Product } from "../models/Product.js";
 import { Coupon } from "../models/Coupon.js";
+import { logAction } from "../models/AuditLog.js";
 import { ok, fail } from "../utils/respond.js";
 
 export async function listProducts(req, res) {
@@ -30,30 +31,113 @@ export async function listProducts(req, res) {
 
 export async function getProduct(req, res) {
   const product = await Product.findById(req.params.productId);
-  if (!product) return fail(res, 404, "Product not found.");
-  return ok(res, product, "Product fetched.");
+  if (!product) return fail(res, 404, "Cloth product not found.");
+  return ok(res, product, "Cloth product fetched.");
 }
 
 export async function createProduct(req, res) {
-  const product = await Product.create({
-    rating: 0,
-    reviewsCount: 0,
-    available: true,
-    ...req.body
+  const body = req.body;
+  if (!body.name || !body.category) {
+    return fail(res, 400, "Cloth name and category are required.");
+  }
+
+  // Ensure sizeVariants exist
+  let sizeVariants = body.sizeVariants;
+  if (!sizeVariants || sizeVariants.length === 0) {
+    const rawSizes = Array.isArray(body.sizes)
+      ? body.sizes
+      : typeof body.sizes === "string"
+      ? body.sizes.split(",").map((s) => s.trim())
+      : ["S", "M", "L", "XL"];
+    const perSizeStock = Math.max(1, Math.floor((body.stock || 10) / rawSizes.length));
+    sizeVariants = rawSizes.map((s) => ({
+      size: s,
+      stock: perSizeStock,
+      available: true
+    }));
+  }
+
+  const images = Array.isArray(body.images) && body.images.length > 0
+    ? body.images
+    : ["https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=600&auto=format&fit=crop"];
+
+  const product = new Product({
+    ...body,
+    images,
+    sizeVariants,
+    rating: body.rating || 4.8,
+    reviewsCount: body.reviewsCount || 12,
+    available: true
   });
-  return ok(res, product, "Product created.");
+
+  await product.save();
+
+  if (req.user) {
+    await logAction({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: "create_cloth_product",
+      targetId: product.id,
+      metadata: { name: product.name, rentPrice: product.rentPrice }
+    });
+  }
+
+  return ok(res, product, "Cloth product created successfully.");
 }
 
 export async function updateProduct(req, res) {
-  const product = await Product.findByIdAndUpdate(req.params.productId, req.body, { new: true });
-  if (!product) return fail(res, 404, "Product not found.");
-  return ok(res, product, "Product updated.");
+  const product = await Product.findById(req.params.productId);
+  if (!product) return fail(res, 404, "Cloth product not found.");
+
+  const updates = req.body;
+  if (updates.sizeVariants && Array.isArray(updates.sizeVariants)) {
+    product.sizeVariants = updates.sizeVariants;
+  } else if (updates.sizes && Array.isArray(updates.sizes)) {
+    product.sizes = updates.sizes;
+  }
+
+  if (updates.name !== undefined) product.name = updates.name;
+  if (updates.category !== undefined) product.category = updates.category;
+  if (updates.gender !== undefined) product.gender = updates.gender;
+  if (updates.description !== undefined) product.description = updates.description;
+  if (updates.rentPrice !== undefined) product.rentPrice = Number(updates.rentPrice);
+  if (updates.price !== undefined) product.price = Number(updates.price);
+  if (updates.securityDeposit !== undefined) product.securityDeposit = Number(updates.securityDeposit);
+  if (updates.images !== undefined && Array.isArray(updates.images)) product.images = updates.images;
+  if (updates.available !== undefined) product.available = Boolean(updates.available);
+  if (updates.stock !== undefined && (!updates.sizeVariants || updates.sizeVariants.length === 0)) {
+    product.stock = Number(updates.stock);
+  }
+
+  await product.save();
+
+  if (req.user) {
+    await logAction({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: "update_cloth_product",
+      targetId: product.id,
+      metadata: { rentPrice: product.rentPrice, stock: product.stock }
+    });
+  }
+
+  return ok(res, product, "Cloth product updated successfully.");
 }
 
 export async function deleteProduct(req, res) {
   const product = await Product.findByIdAndDelete(req.params.productId);
-  if (!product) return fail(res, 404, "Product not found.");
-  return ok(res, null, "Product deleted.");
+  if (!product) return fail(res, 404, "Cloth product not found.");
+
+  if (req.user) {
+    await logAction({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: "delete_cloth_product",
+      targetId: req.params.productId
+    });
+  }
+
+  return ok(res, null, "Cloth product deleted successfully.");
 }
 
 export async function listCoupons(_req, res) {

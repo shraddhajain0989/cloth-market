@@ -82,9 +82,8 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
     }
   }
 
-  // Calculations
+  // Calculations (Tax completely removed)
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const tax = Math.round(subtotal * 0.08);
   const deliveryFee = subtotal > 1499 || subtotal === 0 ? 0 : 99;
 
   let discount = 0;
@@ -96,7 +95,7 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
     }
   }
 
-  const grandTotal = Math.max(0, subtotal + tax + deliveryFee - discount);
+  const grandTotal = Math.max(0, subtotal + deliveryFee - discount);
 
   async function handlePlaceOrder(e) {
     e.preventDefault();
@@ -286,26 +285,9 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
 
                   {/* Payment Method */}
                   <div className="space-y-2 pt-2 border-t border-cm-border">
-                    <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Payment Method</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod("cod")}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                          paymentMethod === "cod" ? "border-cm-black bg-cm-black text-white" : "border-cm-border text-cm-muted"
-                        }`}
-                      >
-                        Cash on Delivery
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPaymentMethod("upi")}
-                        className={`p-2.5 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                          paymentMethod === "upi" ? "border-cm-black bg-cm-black text-white" : "border-cm-border text-cm-muted"
-                        }`}
-                      >
-                        UPI / Card
-                      </button>
+                    <label className="text-2xs font-bold uppercase tracking-wider text-cm-black block mb-1.5">Payment Method</label>
+                    <div className="p-3 rounded-xl border border-cm-black bg-cm-black text-white text-xs font-semibold flex items-center justify-center gap-1.5">
+                      Cash on Delivery (Cash Only)
                     </div>
                   </div>
                 </>
@@ -319,10 +301,6 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
                   <div className="flex justify-between">
                     <span>Subtotal</span>
                     <span className="font-semibold text-cm-black">₹{subtotal.toLocaleString("en-IN")}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Tax (8%)</span>
-                    <span className="font-semibold text-cm-black">₹{tax.toLocaleString("en-IN")}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Delivery Fee</span>

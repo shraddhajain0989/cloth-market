@@ -17,7 +17,7 @@ export async function getProfile(req, res) {
 }
 
 export async function updateProfile(req, res) {
-  const { password, role, refreshTokens, ...allowedUpdates } = req.body;
+  const { password, role, status, refreshTokens, resetPasswordToken, resetPasswordExpiry, ...allowedUpdates } = req.body;
   const user = await User.findByIdAndUpdate(req.user._id, allowedUpdates, { new: true });
   return ok(res, sanitizeUser(user), "Profile updated.");
 }
