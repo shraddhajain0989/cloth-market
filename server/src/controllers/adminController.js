@@ -354,3 +354,147 @@ export async function completeRental(req, res) {
 
   return ok(res, rental, "Rental marked as COMPLETED.");
 }
+
+export const OPERATIONAL_RENTAL_STATUSES = [
+  "PENDING_ADVANCE",
+  "CONFIRMED",
+  "READY_FOR_HANDOVER",
+  "HANDOVER_INSPECTION",
+  "ACTIVE_RENTAL",
+  "EXTENSION_REQUESTED",
+  "EXTENDED",
+  "RETURN_INSPECTION",
+  "DAMAGE_REPORTED",
+  "DAMAGE_SETTLEMENT"
+];
+
+/**
+ * Bulk remove clothes from active inventory safely.
+ * Preserves historical rental records and prevents deletion if operational rentals exist.
+ */
+export async function bulkRemoveProducts(req, res) {
+  const { productIds } = req.body || {};
+
+  if (!productIds || !Array.isArray(productIds) || productIds.length === 0) {
+    return fail(res, 400, "Please provide an array of productIds to remove.");
+  }
+
+  const rawIds = productIds.map((id) => (typeof id === "string" ? id.trim() : String(id || ""))).filter(Boolean);
+  const uniqueIds = [...new Set(rawIds)];
+
+  if (uniqueIds.length === 0) {
+    return fail(res, 400, "No valid product IDs provided.");
+  }
+
+  const removed = [];
+  const blocked = [];
+
+  for (const id of uniqueIds) {
+    // 1. Validate ID format
+    if (!id || typeof id !== "string" || id.length !== 24 || !/^[0-9a-fA-F]{24}$/.test(id)) {
+      blocked.push({
+        productId: id,
+        status: "blocked",
+        reason: "Invalid product ID format."
+      });
+      continue;
+    }
+
+    // 2. Fetch product
+    const product = await Product.findById(id);
+    if (!product) {
+      blocked.push({
+        productId: id,
+        status: "blocked",
+        reason: "Product not found in catalog."
+      });
+      continue;
+    }
+
+    // 3. Check for active/pending/upcoming/operational rentals
+    const activeRental = await Rental.findOne({
+      $and: [
+        { $or: [{ clothId: id }, { productId: id }] },
+        {
+          $or: [
+            { rentalStatus: { $in: OPERATIONAL_RENTAL_STATUSES } },
+            { rentalStatus: { $exists: false }, status: { $in: OPERATIONAL_RENTAL_STATUSES } }
+          ]
+        }
+      ]
+    });
+
+    if (activeRental) {
+      const currentStatus = activeRental.rentalStatus || activeRental.status || "ACTIVE";
+      blocked.push({
+        productId: id,
+        name: product.name,
+        status: "blocked",
+        reason: `Product has an active or upcoming rental (status: ${currentStatus}).`
+      });
+      continue;
+    }
+
+    // 4. Safe removal:
+    // Soft-remove by deactivating availability to ensure historical rental references and snapshots remain 100% intact.
+    product.available = false;
+    product.stock = 0;
+    if (Array.isArray(product.sizeVariants)) {
+      product.sizeVariants.forEach((v) => {
+        v.available = false;
+        v.stock = 0;
+      });
+    }
+    await product.save();
+
+    removed.push({
+      productId: id,
+      name: product.name,
+      status: "removed"
+    });
+  }
+
+  // 5. Audit Logging
+  if (req.user) {
+    await logAction({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: "BULK_REMOVE_PRODUCTS",
+      targetType: "product",
+      metadata: {
+        selectedProductIds: uniqueIds,
+        removedProductIds: removed.map((r) => r.productId),
+        blockedProductIds: blocked.map((b) => b.productId),
+        blockedDetails: blocked,
+        counts: {
+          selected: uniqueIds.length,
+          removed: removed.length,
+          blocked: blocked.length
+        }
+      }
+    });
+  }
+
+  let message = "";
+  if (blocked.length === 0) {
+    message = `${removed.length} ${removed.length === 1 ? "cloth" : "clothes"} removed successfully.`;
+  } else if (removed.length === 0) {
+    message = `0 clothes removed. ${blocked.length} ${blocked.length === 1 ? "could not be removed because it has active/upcoming rentals or errors." : "could not be removed because they have active/upcoming rentals."}`;
+  } else {
+    message = `${removed.length} ${removed.length === 1 ? "cloth" : "clothes"} removed. ${blocked.length} could not be removed because they have active/upcoming rentals.`;
+  }
+
+  return ok(
+    res,
+    {
+      removed,
+      blocked,
+      counts: {
+        selected: uniqueIds.length,
+        removed: removed.length,
+        blocked: blocked.length
+      }
+    },
+    message
+  );
+}

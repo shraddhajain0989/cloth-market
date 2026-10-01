@@ -15,6 +15,7 @@ export const productApi = {
   create: (payload) => api.post("/products", payload),
   update: (id, payload) => api.put(`/products/${id}`, payload),
   remove: (id) => api.delete(`/products/${id}`),
+  bulkRemove: (productIds) => api.delete("/admin/products/bulk", { data: { productIds } }),
   coupons: () => api.get("/products/coupons")
 };
 
@@ -57,7 +58,8 @@ export const adminApi = {
   returnInspection: (id, payload) => api.post(`/admin/rentals/${id}/return-inspection`, payload),
   reportDamage: (id, payload) => api.post(`/admin/rentals/${id}/damage`, payload),
   resolveDamage: (id) => api.patch(`/admin/rentals/${id}/damage/resolve`),
-  completeRental: (id) => api.patch(`/admin/rentals/${id}/complete`)
+  completeRental: (id) => api.patch(`/admin/rentals/${id}/complete`),
+  bulkRemoveProducts: (productIds) => api.delete("/admin/products/bulk", { data: { productIds } })
 };
 
 export const socialApi = {

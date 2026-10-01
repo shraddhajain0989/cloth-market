@@ -29,6 +29,12 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  // Bulk Cloth Removal State
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkBlockedDetails, setBulkBlockedDetails] = useState(null);
+
   // Product Form
   const [editingProduct, setEditingProduct] = useState(null);
   const [form, setForm] = useState({
@@ -187,9 +193,57 @@ export default function AdminPage() {
     try {
       await productApi.remove(id);
       setMessage("✅ Product removed.");
+      setSelectedProductIds((prev) => prev.filter((item) => item !== id));
       loadData();
     } catch (err) {
       setMessage(`❌ Failed: ${err.response?.data?.message || err.message}`);
+    }
+  }
+
+  function handleToggleSelect(id) {
+    setSelectedProductIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  }
+
+  function handleToggleSelectAll() {
+    if (selectedProductIds.length === catalog.length) {
+      setSelectedProductIds([]);
+    } else {
+      setSelectedProductIds(catalog.map((cloth) => cloth.id || cloth._id));
+    }
+  }
+
+  async function handleExecuteBulkRemove() {
+    if (selectedProductIds.length === 0) return;
+    setBulkLoading(true);
+    setBulkBlockedDetails(null);
+
+    try {
+      const res = await adminApi.bulkRemoveProducts(selectedProductIds);
+      const data = res.data?.data || {};
+      const { removed = [], blocked = [] } = data;
+
+      if (blocked.length > 0 && removed.length === 0) {
+        setBulkBlockedDetails(blocked);
+        setMessage(`⚠️ 0 clothes removed. ${blocked.length} items could not be removed because they have active/upcoming rentals.`);
+      } else if (blocked.length > 0) {
+        setBulkBlockedDetails(blocked);
+        const removedIds = new Set(removed.map((r) => r.productId));
+        setSelectedProductIds((prev) => prev.filter((id) => !removedIds.has(id)));
+        setBulkConfirmOpen(false);
+        setMessage(`⚠️ ${removed.length} clothes removed. ${blocked.length} could not be removed because they have active/upcoming rentals.`);
+        loadData();
+      } else {
+        setSelectedProductIds([]);
+        setBulkConfirmOpen(false);
+        setMessage(`✅ ${removed.length} ${removed.length === 1 ? "cloth" : "clothes"} removed successfully.`);
+        loadData();
+      }
+    } catch (err) {
+      setMessage(`❌ Bulk removal failed: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setBulkLoading(false);
     }
   }
 
@@ -609,8 +663,8 @@ export default function AdminPage() {
 
       {/* ── TAB 2: INVENTORY CATALOG ────────────────────────────────────────── */}
       {activeTab === "inventory" && (
-        <div className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
+        <div className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h3 className="text-lg font-display font-bold text-cm-black">Cloth Rental Catalog</h3>
               <p className="text-xs text-cm-muted">Manage cloth sizes, pricing, and availability</p>
@@ -627,15 +681,71 @@ export default function AdminPage() {
             </button>
           </div>
 
+          {/* Bulk Selection Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-4 p-3.5 rounded-2xl bg-cm-soft border border-cm-border">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none text-xs font-bold text-cm-black">
+              <input
+                type="checkbox"
+                checked={catalog.length > 0 && selectedProductIds.length === catalog.length}
+                onChange={handleToggleSelectAll}
+                className="w-4 h-4 rounded border-cm-border text-cm-black focus:ring-0 cursor-pointer"
+                aria-label="Select all clothes"
+              />
+              <span>Select All ({catalog.length} clothes)</span>
+            </label>
+
+            {selectedProductIds.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-cm-black">
+                  <strong className="text-cm-red">{selectedProductIds.length}</strong> {selectedProductIds.length === 1 ? "cloth" : "clothes"} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedProductIds([]);
+                    setBulkBlockedDetails(null);
+                  }}
+                  className="text-xs text-cm-muted hover:text-cm-black underline cursor-pointer"
+                >
+                  Deselect All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBulkBlockedDetails(null);
+                    setBulkConfirmOpen(true);
+                  }}
+                  className="px-4 py-2 rounded-full bg-cm-red text-white text-xs font-bold hover:bg-red-700 transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 size={13} />
+                  <span>REMOVE SELECTED</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {catalog.map((cloth) => {
               const id = cloth.id || cloth._id;
+              const isSelected = selectedProductIds.includes(id);
+
               return (
                 <div
                   key={id}
-                  className="rounded-2xl border border-cm-border p-4 bg-cm-soft/30 flex flex-col justify-between space-y-3"
+                  className={`rounded-2xl border p-4 bg-cm-soft/30 flex flex-col justify-between space-y-3 transition-all ${
+                    isSelected ? "border-cm-black bg-white ring-2 ring-cm-black/10" : "border-cm-border"
+                  }`}
                 >
                   <div className="flex items-start gap-3">
+                    <label className="flex items-center pt-1 cursor-pointer select-none" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleSelect(id)}
+                        className="w-4 h-4 rounded border-cm-border text-cm-black focus:ring-0 cursor-pointer"
+                        aria-label={`Select ${cloth.name}`}
+                      />
+                    </label>
                     <img
                       src={cloth.images?.[0] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=600&auto=format&fit=crop"}
                       alt={cloth.name}
@@ -692,6 +802,64 @@ export default function AdminPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── BULK REMOVE CONFIRMATION MODAL ───────────────────────────────────── */}
+      {bulkConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-cm-border space-y-4">
+            <div className="flex items-center gap-3 text-cm-red">
+              <div className="p-2.5 rounded-full bg-red-50 text-cm-red">
+                <Trash2 size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-display font-bold text-cm-black">
+                  Remove {selectedProductIds.length} {selectedProductIds.length === 1 ? "cloth" : "clothes"}?
+                </h3>
+                <p className="text-xs text-cm-muted">Bulk inventory removal</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-cm-soft rounded-2xl text-xs text-cm-muted leading-relaxed">
+              Selected clothes will be removed from the active inventory. Historical rental records will be preserved.
+            </div>
+
+            {bulkBlockedDetails && bulkBlockedDetails.length > 0 && (
+              <div className="p-3.5 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-700 space-y-1.5 max-h-48 overflow-y-auto">
+                <p className="font-bold">⚠️ Some items cannot safely be removed:</p>
+                <ul className="list-disc pl-4 space-y-1">
+                  {bulkBlockedDetails.map((b, i) => (
+                    <li key={i}>
+                      <strong>{b.name || b.productId}</strong>: {b.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBulkConfirmOpen(false);
+                  setBulkBlockedDetails(null);
+                }}
+                disabled={bulkLoading}
+                className="px-4 py-2 rounded-full border border-cm-border text-xs font-semibold text-cm-black hover:bg-cm-soft transition-colors cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteBulkRemove}
+                disabled={bulkLoading || selectedProductIds.length === 0}
+                className="px-5 py-2 rounded-full bg-cm-red text-white text-xs font-bold hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+              >
+                {bulkLoading ? "Removing..." : "REMOVE SELECTED"}
+              </button>
+            </div>
           </div>
         </div>
       )}

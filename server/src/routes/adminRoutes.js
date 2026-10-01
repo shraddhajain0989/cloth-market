@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  bulkRemoveProducts,
   completeRental,
   confirmAdvance,
   getDashboard,
@@ -28,5 +29,6 @@ router.post("/rentals/:id/return-inspection", recordReturnInspection);
 router.post("/rentals/:id/damage", reportDamage);
 router.patch("/rentals/:id/damage/resolve", resolveDamage);
 router.patch("/rentals/:id/complete", completeRental);
+router.delete("/products/bulk", bulkRemoveProducts);
 
 export default router;

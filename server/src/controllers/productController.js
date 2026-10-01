@@ -1,12 +1,17 @@
 import { Product } from "../models/Product.js";
 import { Coupon } from "../models/Coupon.js";
+import { Rental } from "../models/Rental.js";
 import { logAction } from "../models/AuditLog.js";
 import { ok, fail } from "../utils/respond.js";
+import { OPERATIONAL_RENTAL_STATUSES } from "./adminController.js";
 
 export async function listProducts(req, res) {
   const { search = "", category = "", sort = "featured" } = req.query;
 
   const query = {};
+  if (req.query.includeInactive !== "true") {
+    query.available = { $ne: false };
+  }
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: "i" } },
@@ -125,19 +130,62 @@ export async function updateProduct(req, res) {
 }
 
 export async function deleteProduct(req, res) {
-  const product = await Product.findByIdAndDelete(req.params.productId);
+  const { productId } = req.params;
+
+  // Check if product exists
+  const product = await Product.findById(productId);
   if (!product) return fail(res, 404, "Cloth product not found.");
+
+  // Check for active or operational rentals
+  const activeRental = await Rental.findOne({
+    $and: [
+      { $or: [{ clothId: productId }, { productId: productId }] },
+      {
+        $or: [
+          { rentalStatus: { $in: OPERATIONAL_RENTAL_STATUSES } },
+          { rentalStatus: { $exists: false }, status: { $in: OPERATIONAL_RENTAL_STATUSES } }
+        ]
+      }
+    ]
+  });
+
+  if (activeRental) {
+    const currentStatus = activeRental.rentalStatus || activeRental.status || "ACTIVE";
+    return fail(res, 400, `Cannot remove product with active or upcoming rentals (status: ${currentStatus}).`);
+  }
+
+  // Check if product has historical rentals
+  const hasHistoricalRentals = await Rental.exists({
+    $or: [{ clothId: productId }, { productId: productId }]
+  });
+
+  if (hasHistoricalRentals) {
+    // Preserve historical rental integrity via soft removal
+    product.available = false;
+    product.stock = 0;
+    if (Array.isArray(product.sizeVariants)) {
+      product.sizeVariants.forEach((v) => {
+        v.available = false;
+        v.stock = 0;
+      });
+    }
+    await product.save();
+  } else {
+    // No rental history ever — safe to hard delete
+    await Product.findByIdAndDelete(productId);
+  }
 
   if (req.user) {
     await logAction({
       actorId: req.user.id,
       actorRole: req.user.role,
       action: "delete_cloth_product",
-      targetId: req.params.productId
+      targetId: productId,
+      targetType: "product"
     });
   }
 
-  return ok(res, null, "Cloth product deleted successfully.");
+  return ok(res, null, "Cloth product removed successfully.");
 }
 
 export async function listCoupons(_req, res) {
