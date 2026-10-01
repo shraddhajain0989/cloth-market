@@ -159,8 +159,8 @@ export default function HomePage() {
 
       {/* 1. Short Hero Section */}
       <section className="bg-cm-soft/60 border-b border-cm-border py-10 sm:py-14 text-center">
-        <div className="cm-container max-w-2xl mx-auto space-y-4 px-4">
-          <h1 className="font-display text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-cm-black">
+        <div className="w-full max-w-2xl mx-auto space-y-4 px-4 sm:px-6">
+          <h1 className="font-display text-2xl sm:text-4xl md:text-5xl font-bold tracking-tight text-cm-black break-words max-w-full">
             Rent the look you love.
           </h1>
           <p className="text-sm sm:text-base text-cm-muted leading-relaxed">
@@ -179,7 +179,7 @@ export default function HomePage() {
       </section>
 
       {/* 2. Search & Filter Bar */}
-      <section id="catalog" className="cm-container space-y-4 px-4 pt-2">
+      <section id="catalog" className="w-full max-w-7xl mx-auto space-y-4 px-4 sm:px-6 lg:px-8 pt-2">
         <form onSubmit={handleSearchSubmit} className="relative w-full max-w-xl mx-auto">
           <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-cm-muted" />
           <input

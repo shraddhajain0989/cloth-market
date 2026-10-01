@@ -29,7 +29,7 @@ export default function Navbar() {
   return (
     <>
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-cm-border transition-all">
-        <div className="cm-container h-16 flex items-center justify-between gap-6">
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-6">
           {/* Brand Logo */}
           <Link
             to="/"
@@ -66,12 +66,12 @@ export default function Navbar() {
           </nav>
 
           {/* Right Actions: Search + Login / Profile */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-3 shrink-0">
             {/* Search Trigger */}
             <button
               type="button"
               onClick={() => setSearchOpen((prev) => !prev)}
-              className="p-2 rounded-full text-cm-muted hover:text-cm-black hover:bg-cm-soft transition-colors"
+              className="min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-cm-muted hover:text-cm-black hover:bg-cm-soft transition-colors"
               aria-label="Search"
             >
               <Search size={18} />
@@ -110,7 +110,7 @@ export default function Navbar() {
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="md:hidden p-2 rounded-full text-cm-muted hover:text-cm-black hover:bg-cm-soft transition-colors"
+              className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center p-2 rounded-full text-cm-muted hover:text-cm-black hover:bg-cm-soft transition-colors"
               aria-label="Menu"
             >
               <Menu size={20} />
@@ -121,7 +121,7 @@ export default function Navbar() {
         {/* Expandable Search Input Bar */}
         {searchOpen && (
           <div className="border-t border-cm-border bg-cm-soft/50 px-4 py-3">
-            <div className="cm-container">
+            <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <form onSubmit={handleSearch} className="flex items-center gap-2">
                 <Search size={16} className="text-cm-muted shrink-0" />
                 <input
