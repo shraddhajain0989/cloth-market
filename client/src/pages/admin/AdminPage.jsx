@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Package,
   Layers,
@@ -13,20 +13,30 @@ import {
   Edit2,
   Eye,
   Check,
-  X
+  X,
+  QrCode,
+  MessageCircle,
+  Download,
+  ShieldCheck,
+  Filter,
+  Copy,
+  ExternalLink,
+  Images,
+  ShieldAlert
 } from "lucide-react";
-import { adminApi, productApi } from "../../api/endpoints";
+import { adminApi, productApi, paymentApi, configApi, uploadApi } from "../../api/endpoints";
 import ImageUpload from "../../components/admin/ImageUpload";
 import SectionHeader from "../../components/common/SectionHeader";
 
 const ALL_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
 
 export default function AdminPage() {
-  const [activeTab, setActiveTab] = useState("rentals"); // 'rentals' | 'inventory' | 'add'
+  const [activeTab, setActiveTab] = useState("rentals"); // 'rentals' | 'inventory' | 'add' | 'payments' | 'settings'
   const [dashboard, setDashboard] = useState(null);
   const [rentals, setRentals] = useState([]);
   const [catalog, setCatalog] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [message, setMessage] = useState("");
 
   // Bulk Cloth Removal State
@@ -37,10 +47,13 @@ export default function AdminPage() {
 
   // Product Form
   const [editingProduct, setEditingProduct] = useState(null);
+  const [savingProduct, setSavingProduct] = useState(false);
   const [form, setForm] = useState({
     name: "",
     category: "Ethnic",
     gender: "Women",
+    listingType: "RENT", // 'RENT' | 'RESELL' | 'BOTH'
+    condition: "Like new", // 'New with tags' | 'Like new' | 'Gently used'
     rentPrice: 500,
     price: 3500,
     securityDeposit: 0,
@@ -53,7 +66,38 @@ export default function AdminPage() {
     L: 4,
     XL: 2
   });
-  const [imageUrl, setImageUrl] = useState("");
+
+  // Payments & Manual Verification State
+  const [payments, setPayments] = useState([]);
+  const [paymentFilterStatus, setPaymentFilterStatus] = useState("ALL");
+  const [paymentFilterType, setPaymentFilterType] = useState("ALL");
+  const [paymentSearch, setPaymentSearch] = useState("");
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [verifyModal, setVerifyModal] = useState({
+    open: false,
+    payment: null,
+    confirmed: false,
+    transactionReference: "",
+    notes: ""
+  });
+  const [rejectModal, setRejectModal] = useState({
+    open: false,
+    payment: null,
+    rejectionReason: "",
+    notes: ""
+  });
+
+  // Business QR & WhatsApp Config State
+  const [businessConfig, setBusinessConfig] = useState({
+    businessName: "Cloth Market",
+    whatsappNumber: "",
+    paymentQrUrl: "",
+    upiId: "",
+    paymentInstructions: ""
+  });
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [uploadingQr, setUploadingQr] = useState(false);
+  const qrInputRef = useRef(null);
 
   // Inspection Modal State
   const [inspectionModal, setInspectionModal] = useState(null); // { type: 'handover' | 'return', rental: {...} }
@@ -81,14 +125,35 @@ export default function AdminPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [dashRes, rentalsRes, prodRes] = await Promise.all([
+      const [dashRes, rentalsRes, prodRes, payRes, cfgRes] = await Promise.allSettled([
         adminApi.dashboard(),
         adminApi.rentals(),
-        productApi.list()
+        productApi.list(),
+        paymentApi.list(),
+        configApi.getAdmin()
       ]);
-      setDashboard(dashRes.data.data);
-      setRentals(rentalsRes.data.data || []);
-      setCatalog(prodRes.data.data.items || []);
+
+      // Check if backend rejected administrative requests
+      const isForbidden = [dashRes, rentalsRes, payRes, cfgRes].some(
+        (res) => res.status === "rejected" && [401, 403].includes(res.reason?.response?.status)
+      );
+
+      if (isForbidden) {
+        setUnauthorized(true);
+        setDashboard(null);
+        setRentals([]);
+        setCatalog([]);
+        setPayments([]);
+        setBusinessConfig({});
+        setLoading(false);
+        return;
+      }
+
+      if (dashRes.status === "fulfilled") setDashboard(dashRes.value.data?.data);
+      if (rentalsRes.status === "fulfilled") setRentals(rentalsRes.value.data?.data || []);
+      if (prodRes.status === "fulfilled") setCatalog(prodRes.value.data?.data?.items || []);
+      if (payRes.status === "fulfilled") setPayments(payRes.value.data?.data || []);
+      if (cfgRes.status === "fulfilled") setBusinessConfig(cfgRes.value.data?.data || {});
     } catch {
       setMessage("❌ Failed to load admin dashboard data.");
     } finally {
@@ -102,17 +167,25 @@ export default function AdminPage() {
 
   function handleOpenEdit(prod) {
     setEditingProduct(prod);
+    const existingImages = Array.isArray(prod.images) && prod.images.length > 0
+      ? prod.images
+      : prod.image
+      ? [prod.image]
+      : [];
+
     setForm({
       name: prod.name,
       category: prod.category,
       gender: prod.gender || "Women",
+      listingType: prod.listingType || "RENT",
+      condition: prod.condition || "Like new",
       rentPrice: prod.rentPrice || 0,
       price: prod.price || 0,
       securityDeposit: prod.securityDeposit || 0,
       description: prod.description || "",
-      images: prod.images || []
+      images: existingImages
     });
-    setImageUrl(prod.images?.[0] || "");
+
     const initialStocks = {};
     if (prod.sizeVariants?.length) {
       prod.sizeVariants.forEach((v) => {
@@ -133,6 +206,8 @@ export default function AdminPage() {
       name: "",
       category: "Ethnic",
       gender: "Women",
+      listingType: "RENT",
+      condition: "Like new",
       rentPrice: 500,
       price: 3500,
       securityDeposit: 0,
@@ -140,13 +215,40 @@ export default function AdminPage() {
       images: []
     });
     setSizeStocks({ S: 2, M: 5, L: 4, XL: 2 });
-    setImageUrl("");
   }
 
   async function handleSaveProduct(e) {
     e.preventDefault();
+    if (savingProduct) return;
     setMessage("");
 
+    // 1. Validate images: 1 to 5 images
+    if (!form.images || form.images.length === 0) {
+      setMessage("❌ Please upload at least 1 cloth image (up to 5 maximum).");
+      return;
+    }
+    if (form.images.length > 5) {
+      setMessage(`❌ A maximum of 5 images is allowed per product (currently ${form.images.length}).`);
+      return;
+    }
+
+    // 2. Validate pricing based on listing type
+    if (form.listingType === "RENT" && Number(form.rentPrice) <= 0) {
+      setMessage("❌ Rental price per day is required for RENT listings.");
+      return;
+    }
+    if (form.listingType === "RESELL" && Number(form.price) <= 0) {
+      setMessage("❌ Selling price is required for RESELL listings.");
+      return;
+    }
+    if (form.listingType === "BOTH") {
+      if (Number(form.rentPrice) <= 0 || Number(form.price) <= 0) {
+        setMessage("❌ Both rental price and selling price are required for BOTH (RENT & RESELL) listings.");
+        return;
+      }
+    }
+
+    // 3. Validate size variants stock
     const sizeVariants = Object.entries(sizeStocks)
       .filter(([_, stock]) => Number(stock) > 0)
       .map(([size, stock]) => ({
@@ -160,8 +262,6 @@ export default function AdminPage() {
       return;
     }
 
-    const images = imageUrl ? [imageUrl] : form.images?.length ? form.images : ["https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=600&auto=format&fit=crop"];
-
     const payload = {
       ...form,
       rentPrice: Number(form.rentPrice),
@@ -169,22 +269,111 @@ export default function AdminPage() {
       securityDeposit: Number(form.securityDeposit),
       sizeVariants,
       sizes: sizeVariants.map((v) => v.size),
-      images
+      images: form.images
     };
 
+    setSavingProduct(true);
     try {
       if (editingProduct) {
         await productApi.update(editingProduct.id || editingProduct._id, payload);
         setMessage("✅ Cloth product updated successfully.");
       } else {
         await productApi.create(payload);
-        setMessage("✅ New cloth added to rental catalog.");
+        setMessage("✅ New cloth added to catalog.");
       }
       handleResetForm();
       setActiveTab("inventory");
       loadData();
     } catch (err) {
       setMessage(`❌ Save failed: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setSavingProduct(false);
+    }
+  }
+
+  // Payment Verification Handlers
+  async function handleVerifyPaymentSubmit(e) {
+    e.preventDefault();
+    if (!verifyModal.confirmed) {
+      setMessage("❌ Please explicitly check the confirmation box verifying actual receipt of payment.");
+      return;
+    }
+
+    setVerifyingPayment(true);
+    try {
+      const paymentId = verifyModal.payment?._id || verifyModal.payment?.id;
+      await paymentApi.verify(paymentId, {
+        confirmed: true,
+        transactionReference: verifyModal.transactionReference,
+        notes: verifyModal.notes
+      });
+      setMessage("✅ Payment marked as VERIFIED successfully.");
+      setVerifyModal({ open: false, payment: null, confirmed: false, transactionReference: "", notes: "" });
+      loadData();
+    } catch (err) {
+      setMessage(`❌ Verification failed: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setVerifyingPayment(false);
+    }
+  }
+
+  async function handleRejectPaymentSubmit(e) {
+    e.preventDefault();
+    if (!rejectModal.rejectionReason.trim()) {
+      setMessage("❌ A valid rejection reason is required.");
+      return;
+    }
+
+    setVerifyingPayment(true);
+    try {
+      const paymentId = rejectModal.payment?._id || rejectModal.payment?.id;
+      await paymentApi.reject(paymentId, {
+        rejectionReason: rejectModal.rejectionReason,
+        notes: rejectModal.notes
+      });
+      setMessage("⚠️ Payment marked as REJECTED.");
+      setRejectModal({ open: false, payment: null, rejectionReason: "", notes: "" });
+      loadData();
+    } catch (err) {
+      setMessage(`❌ Rejection failed: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setVerifyingPayment(false);
+    }
+  }
+
+  // Business Config (WhatsApp & QR) Handlers
+  async function handleSaveConfig(e) {
+    e.preventDefault();
+    setSavingConfig(true);
+    try {
+      await configApi.updateAdmin(businessConfig);
+      setMessage("✅ Business WhatsApp and Payment QR configuration saved successfully.");
+      loadData();
+    } catch (err) {
+      setMessage(`❌ Failed to save settings: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
+  async function handleQrFileUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingQr(true);
+    try {
+      const { data } = await uploadApi.qr(file);
+      const url = data?.data?.url || data?.url;
+      if (url) {
+        setBusinessConfig((curr) => ({ ...curr, paymentQrUrl: url }));
+        await configApi.updateAdmin({ ...businessConfig, paymentQrUrl: url });
+        setMessage("✅ Official Payment QR Code uploaded and saved.");
+      }
+    } catch (err) {
+      setMessage(`❌ Failed to upload QR image: ${err.response?.data?.message || err.message}`);
+    } finally {
+      setUploadingQr(false);
+      if (qrInputRef.current) qrInputRef.current.value = "";
     }
   }
 
@@ -342,6 +531,26 @@ export default function AdminPage() {
     }
   }
 
+  if (unauthorized) {
+    return (
+      <div className="rounded-3xl bg-white border border-red-200 p-12 text-center shadow-sm max-w-xl mx-auto my-12">
+        <div className="w-16 h-16 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-xl font-display font-bold text-cm-black">Access Denied</h2>
+        <p className="text-sm text-cm-muted mt-2">
+          You do not have administrative privileges to access this console. This request has been rejected by server-side role authorization.
+        </p>
+        <button
+          onClick={() => (window.location.href = "/")}
+          className="mt-6 px-6 py-2.5 rounded-full bg-cm-black text-white text-xs font-bold hover:bg-neutral-800 transition cursor-pointer"
+        >
+          Return to Storefront
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 pb-12">
       <SectionHeader
@@ -391,22 +600,22 @@ export default function AdminPage() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-cm-border gap-3 text-sm font-bold">
+      <div className="flex border-b border-cm-border gap-2 text-sm font-bold overflow-x-auto pb-1">
         <button
           onClick={() => setActiveTab("rentals")}
-          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
             activeTab === "rentals"
               ? "border-cm-black text-cm-black"
               : "border-transparent text-cm-muted hover:text-cm-black"
           }`}
         >
           <Package size={16} />
-          <span>Rental Orders & Handovers ({rentals.length})</span>
+          <span>Rental Orders ({rentals.length})</span>
         </button>
 
         <button
           onClick={() => setActiveTab("inventory")}
-          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
             activeTab === "inventory"
               ? "border-cm-black text-cm-black"
               : "border-transparent text-cm-muted hover:text-cm-black"
@@ -421,7 +630,7 @@ export default function AdminPage() {
             handleResetForm();
             setActiveTab("add");
           }}
-          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 ${
+          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
             activeTab === "add"
               ? "border-cm-black text-cm-black"
               : "border-transparent text-cm-muted hover:text-cm-black"
@@ -429,6 +638,30 @@ export default function AdminPage() {
         >
           <Plus size={16} />
           <span>{editingProduct ? "Edit Cloth" : "Add New Cloth"}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("payments")}
+          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "payments"
+              ? "border-cm-black text-cm-black"
+              : "border-transparent text-cm-muted hover:text-cm-black"
+          }`}
+        >
+          <ShieldCheck size={16} />
+          <span>Payment Verifications ({payments.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("settings")}
+          className={`pb-3 px-4 border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === "settings"
+              ? "border-cm-black text-cm-black"
+              : "border-transparent text-cm-muted hover:text-cm-black"
+          }`}
+        >
+          <QrCode size={16} />
+          <span>WhatsApp & Payment QR</span>
         </button>
       </div>
 
@@ -746,16 +979,41 @@ export default function AdminPage() {
                         aria-label={`Select ${cloth.name}`}
                       />
                     </label>
-                    <img
-                      src={cloth.images?.[0] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=600&auto=format&fit=crop"}
-                      alt={cloth.name}
-                      className="w-16 h-20 rounded-xl object-cover border border-cm-border shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <h4 className="font-display font-bold text-sm text-cm-black truncate">{cloth.name}</h4>
+                    <div className="relative shrink-0">
+                      <img
+                        src={cloth.images?.[0] || "https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=600&auto=format&fit=crop"}
+                        alt={cloth.name}
+                        className="w-16 h-20 rounded-xl object-cover border border-cm-border shrink-0"
+                      />
+                      {cloth.images?.length > 1 && (
+                        <span className="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-black/70 text-white text-[9px] font-bold flex items-center gap-0.5">
+                          <Images size={9} /> {cloth.images.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-display font-bold text-sm text-cm-black truncate">{cloth.name}</h4>
+                        <span className={`px-2 py-0.2 rounded-full text-[9px] font-bold uppercase tracking-wider ${
+                          cloth.listingType === "BOTH"
+                            ? "bg-purple-100 text-purple-800 border border-purple-200"
+                            : cloth.listingType === "RESELL"
+                            ? "bg-blue-100 text-blue-800 border border-blue-200"
+                            : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                        }`}>
+                          {cloth.listingType === "BOTH" ? "Rent & Resell" : cloth.listingType === "RESELL" ? "Resale Only" : "Rent Only"}
+                        </span>
+                      </div>
                       <p className="text-xs text-cm-muted">{cloth.category} • {cloth.gender}</p>
-                      <p className="text-xs font-bold text-cm-red mt-1">Rent: ₹{cloth.rentPrice}/day</p>
-                      <p className="text-2xs text-cm-muted">Retail: ₹{cloth.price}</p>
+                      {cloth.listingType !== "RESELL" && (
+                        <p className="text-xs font-bold text-cm-red mt-0.5">Rent: ₹{cloth.rentPrice}/day</p>
+                      )}
+                      {(cloth.listingType === "RESELL" || cloth.listingType === "BOTH") && (
+                        <p className="text-xs font-bold text-blue-700">Resale: ₹{cloth.price}</p>
+                      )}
+                      {cloth.listingType === "RENT" && (
+                        <p className="text-2xs text-cm-muted">Retail ref: ₹{cloth.price}</p>
+                      )}
                     </div>
                   </div>
 
@@ -885,14 +1143,26 @@ export default function AdminPage() {
             )}
           </div>
 
-          {/* Image Upload */}
+          {/* Image Upload (1 to 5 Photos) */}
           <div>
-            <label className="text-2xs font-bold uppercase tracking-wider text-cm-black block mb-2">Cloth Image</label>
-            <ImageUpload value={imageUrl} onChange={setImageUrl} />
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                Clothing Photos (1 to 5 Images) <span className="text-cm-red">*</span>
+              </label>
+              <span className="text-2xs font-semibold text-cm-muted">{form.images.length}/5 uploaded</span>
+            </div>
+            <p className="text-2xs text-cm-muted mb-2">
+              The first image is used as the primary cover card. Use the arrows or drag to reorder.
+            </p>
+            <ImageUpload
+              value={form.images}
+              onChange={(newImgs) => setForm((c) => ({ ...c, images: newImgs }))}
+              disabled={savingProduct}
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1 text-left">
+            <div className="space-y-1 text-left sm:col-span-2">
               <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Cloth Name</label>
               <input
                 type="text"
@@ -903,6 +1173,47 @@ export default function AdminPage() {
                 className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
               />
             </div>
+
+            <div className="space-y-1 text-left">
+              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Listing Type</label>
+              <select
+                value={form.listingType}
+                onChange={(e) => setForm((c) => ({ ...c, listingType: e.target.value }))}
+                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black bg-white font-semibold"
+              >
+                <option value="RENT">Rent Only</option>
+                <option value="RESELL">Resell Only (Buy)</option>
+                <option value="BOTH">Both (Rent & Resell)</option>
+              </select>
+            </div>
+
+            {(form.listingType === "RESELL" || form.listingType === "BOTH") ? (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Garment Condition</label>
+                <select
+                  value={form.condition}
+                  onChange={(e) => setForm((c) => ({ ...c, condition: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black bg-white"
+                >
+                  <option value="New with tags">New with tags</option>
+                  <option value="Like new">Like new</option>
+                  <option value="Gently used">Gently used</option>
+                </select>
+              </div>
+            ) : (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Gender</label>
+                <select
+                  value={form.gender}
+                  onChange={(e) => setForm((c) => ({ ...c, gender: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black bg-white"
+                >
+                  <option value="Women">Women</option>
+                  <option value="Men">Men</option>
+                  <option value="Unisex">Unisex</option>
+                </select>
+              </div>
+            )}
 
             <div className="space-y-1 text-left">
               <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Category</label>
@@ -919,55 +1230,78 @@ export default function AdminPage() {
               </select>
             </div>
 
-            <div className="space-y-1 text-left">
-              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Gender</label>
-              <select
-                value={form.gender}
-                onChange={(e) => setForm((c) => ({ ...c, gender: e.target.value }))}
-                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black bg-white"
-              >
-                <option value="Women">Women</option>
-                <option value="Men">Men</option>
-                <option value="Unisex">Unisex</option>
-              </select>
-            </div>
+            {(form.listingType === "RESELL" || form.listingType === "BOTH") && (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Gender</label>
+                <select
+                  value={form.gender}
+                  onChange={(e) => setForm((c) => ({ ...c, gender: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black bg-white"
+                >
+                  <option value="Women">Women</option>
+                  <option value="Men">Men</option>
+                  <option value="Unisex">Unisex</option>
+                </select>
+              </div>
+            )}
 
-            <div className="space-y-1 text-left">
-              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Rental Price (₹ / day)</label>
-              <input
-                type="number"
-                min="0"
-                required
-                value={form.rentPrice}
-                onChange={(e) => setForm((c) => ({ ...c, rentPrice: e.target.value }))}
-                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black font-bold text-cm-red"
-              />
-            </div>
+            {/* Dynamic Pricing Fields */}
+            {(form.listingType === "RENT" || form.listingType === "BOTH") && (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Rental Price (₹ / day)</label>
+                <input
+                  type="number"
+                  min="0"
+                  required
+                  value={form.rentPrice}
+                  onChange={(e) => setForm((c) => ({ ...c, rentPrice: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black font-bold text-cm-red"
+                />
+              </div>
+            )}
 
-            <div className="space-y-1 text-left">
-              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Retail Reference Value (₹)</label>
-              <input
-                type="number"
-                min="0"
-                value={form.price}
-                onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
-                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
-              />
-            </div>
+            {(form.listingType === "RESELL" || form.listingType === "BOTH") && (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Resale Selling Price (₹)</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={form.price}
+                  onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black font-bold text-blue-700"
+                />
+              </div>
+            )}
 
-            <div className="space-y-1 text-left">
-              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Security Deposit (₹)</label>
-              <input
-                type="number"
-                min="0"
-                value={form.securityDeposit}
-                onChange={(e) => setForm((c) => ({ ...c, securityDeposit: e.target.value }))}
-                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
-              />
-            </div>
+            {form.listingType === "RENT" && (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Retail Reference Value (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.price}
+                  onChange={(e) => setForm((c) => ({ ...c, price: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
+                />
+              </div>
+            )}
+
+            {(form.listingType === "RENT" || form.listingType === "BOTH") && (
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Security Deposit (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={form.securityDeposit}
+                  onChange={(e) => setForm((c) => ({ ...c, securityDeposit: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
+                />
+              </div>
+            )}
           </div>
 
-          {/* Clothing Size Variants & Stock per Size (Part 6 & 7) */}
+          {/* Clothing Size Variants & Stock per Size */}
           <div className="p-4 rounded-2xl bg-cm-soft/60 border border-cm-border space-y-3">
             <div>
               <label className="text-2xs font-bold uppercase tracking-wider text-cm-black block">
@@ -1008,11 +1342,698 @@ export default function AdminPage() {
 
           <button
             type="submit"
-            className="btn btn-primary w-full py-3.5 text-sm font-semibold rounded-2xl shadow-lg"
+            disabled={savingProduct}
+            className="btn btn-primary w-full py-3.5 text-sm font-semibold rounded-2xl shadow-lg disabled:opacity-50"
           >
-            {editingProduct ? "Save Changes" : "Create Cloth in Catalog"}
+            {savingProduct ? "Saving Cloth..." : editingProduct ? "Save Changes" : "Create Cloth in Catalog"}
           </button>
         </form>
+      )}
+
+      {/* ── TAB 4: MANUAL PAYMENT VERIFICATIONS ──────────────────────────────── */}
+      {activeTab === "payments" && (
+        <div className="space-y-6">
+          <div className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-cm-border">
+              <div>
+                <h3 className="text-xl font-display font-bold text-cm-black">Payment Verifications</h3>
+                <p className="text-xs text-cm-muted">
+                  Review customer UPI payments, verify transaction receipts, and approve booking advances
+                </p>
+              </div>
+
+              {/* Search and Filters */}
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search customer, ref, or cloth..."
+                  value={paymentSearch}
+                  onChange={(e) => setPaymentSearch(e.target.value)}
+                  className="px-3.5 py-2 text-xs rounded-xl border border-cm-border focus:border-cm-black"
+                />
+
+                <select
+                  value={paymentFilterStatus}
+                  onChange={(e) => setPaymentFilterStatus(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl border border-cm-border bg-white font-medium"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="Enquiry Initiated">WhatsApp Enquiries (Unpaid)</option>
+                  <option value="Awaiting Confirmation">Awaiting Confirmation</option>
+                  <option value="Awaiting Payment">Awaiting Payment</option>
+                  <option value="Payment Reported">Payment Reported</option>
+                  <option value="Verified">Verified</option>
+                  <option value="Rejected">Rejected</option>
+                  <option value="Cancelled">Cancelled</option>
+                </select>
+
+                <select
+                  value={paymentFilterType}
+                  onChange={(e) => setPaymentFilterType(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl border border-cm-border bg-white font-medium"
+                >
+                  <option value="ALL">All Types</option>
+                  <option value="RENT">Rental Bookings</option>
+                  <option value="BUY">Resale Purchases</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Status KPI summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 pt-4 pb-2">
+              <div className="p-3 rounded-2xl bg-cm-soft border border-cm-border">
+                <span className="text-[10px] uppercase font-bold text-cm-muted block">Total Tracked</span>
+                <span className="text-lg font-bold text-cm-black">{payments.length}</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                <span className="text-[10px] uppercase font-bold text-slate-700 block">Enquiries</span>
+                <span className="text-lg font-bold text-slate-700">
+                  {payments.filter((p) => p.status === "Enquiry Initiated").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <span className="text-[10px] uppercase font-bold text-amber-700 block">Awaiting Payment</span>
+                <span className="text-lg font-bold text-amber-700">
+                  {payments.filter((p) => p.status === "Awaiting Payment" || p.status === "Awaiting Confirmation").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200">
+                <span className="text-[10px] uppercase font-bold text-blue-700 block">Payment Reported</span>
+                <span className="text-lg font-bold text-blue-700">
+                  {payments.filter((p) => p.status === "Payment Reported").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 block">Verified</span>
+                <span className="text-lg font-bold text-emerald-700">
+                  {payments.filter((p) => p.status === "Verified").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-red-50 border border-red-200">
+                <span className="text-[10px] uppercase font-bold text-cm-red block">Rejected</span>
+                <span className="text-lg font-bold text-cm-red">
+                  {payments.filter((p) => p.status === "Rejected").length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Payments */}
+          {(() => {
+            const filteredPayments = payments.filter((p) => {
+              if (paymentFilterStatus !== "ALL" && p.status !== paymentFilterStatus) return false;
+              if (paymentFilterType !== "ALL" && p.transactionType !== paymentFilterType) return false;
+              if (paymentSearch.trim()) {
+                const q = paymentSearch.toLowerCase();
+                const ref = (p.customerReference || "").toLowerCase();
+                const name = (p.customer?.name || "").toLowerCase();
+                const email = (p.customer?.email || "").toLowerCase();
+                const phone = (p.customer?.phone || "").toLowerCase();
+                const prod = (p.product?.name || "").toLowerCase();
+                if (!ref.includes(q) && !name.includes(q) && !email.includes(q) && !phone.includes(q) && !prod.includes(q)) {
+                  return false;
+                }
+              }
+              return true;
+            });
+
+            if (filteredPayments.length === 0) {
+              return (
+                <div className="rounded-3xl bg-white border border-cm-border p-12 text-center shadow-sm">
+                  <ShieldCheck size={36} className="mx-auto text-cm-muted mb-2" />
+                  <p className="text-sm font-semibold text-cm-black">No payment records found.</p>
+                  <p className="text-xs text-cm-muted mt-1">
+                    When customers enquire or book clothes via WhatsApp, payment tracking records are automatically logged here.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-4">
+                {filteredPayments.map((p) => {
+                  const id = p._id || p.id;
+                  const isRent = p.transactionType === "RENT";
+                  const statusColors = {
+                    "Enquiry Initiated": "bg-slate-100 text-slate-800 border-slate-300",
+                    "Awaiting Confirmation": "bg-yellow-100 text-yellow-900 border-yellow-300",
+                    "Awaiting Payment": "bg-amber-100 text-amber-900 border-amber-300",
+                    "Payment Reported": "bg-blue-100 text-blue-900 border-blue-300",
+                    "Verified": "bg-emerald-100 text-emerald-900 border-emerald-300",
+                    "Rejected": "bg-red-100 text-red-900 border-red-300",
+                    "Cancelled": "bg-gray-100 text-gray-800 border-gray-300"
+                  };
+
+                  return (
+                    <div
+                      key={id}
+                      className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm space-y-4"
+                    >
+                      {/* Top Bar: Customer & Status */}
+                      <div className="flex flex-wrap items-start justify-between gap-3 pb-3 border-b border-cm-border">
+                        <div className="flex items-center gap-3">
+                          {p.product?.images?.[0] ? (
+                            <img
+                              src={p.product.images[0]}
+                              alt={p.product.name}
+                              className="w-14 h-16 rounded-xl object-cover border border-cm-border shrink-0"
+                            />
+                          ) : (
+                            <div className="w-14 h-16 rounded-xl bg-cm-soft border border-cm-border flex items-center justify-center font-bold text-xs text-cm-muted shrink-0">
+                              No Pic
+                            </div>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-display font-bold text-base text-cm-black">
+                                {p.product?.name || "Cloth Item"}
+                              </h4>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                  isRent ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
+                                }`}
+                              >
+                                {isRent ? "Rental Booking" : "Resale Purchase"}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-cm-soft text-cm-black border border-cm-border">
+                                Size: {p.size}
+                              </span>
+                            </div>
+                            <p className="text-2xs text-cm-muted mt-1">
+                              Ref: <strong className="font-mono text-cm-black">{p.customerReference}</strong> • Created:{" "}
+                              {new Date(p.createdAt).toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                              statusColors[p.status] || "bg-gray-100 text-gray-800 border-gray-200"
+                            }`}
+                          >
+                            {p.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Middle Grid: Customer Details & Financial Breakdown */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                        {/* Customer Information */}
+                        <div className="p-3.5 rounded-2xl bg-cm-soft/50 border border-cm-border space-y-1.5">
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-cm-muted">Customer Details</p>
+                          <p className="font-bold text-cm-black">{p.customer?.name || "Customer"}</p>
+                          <p className="text-2xs text-cm-muted truncate">{p.customer?.email}</p>
+                          {p.customer?.phone && (
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-2xs font-mono font-semibold text-cm-black">{p.customer.phone}</span>
+                              <a
+                                href={`https://wa.me/${p.customer.phone.replace(/[^0-9]/g, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:underline"
+                              >
+                                <MessageCircle size={12} /> Chat
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Order & Dates Breakdown */}
+                        <div className="p-3.5 rounded-2xl bg-cm-soft/50 border border-cm-border space-y-1.5">
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-cm-muted">
+                            {isRent ? "Rental Schedule" : "Purchase Quantity"}
+                          </p>
+                          {isRent ? (
+                            <>
+                              <p className="font-semibold text-cm-black">
+                                {p.rentalStartDate} → {p.rentalEndDate}
+                              </p>
+                              <p className="text-2xs text-cm-muted">{p.rentalDuration} Days Duration</p>
+                            </>
+                          ) : (
+                            <>
+                              <p className="font-semibold text-cm-black">Quantity: {p.quantity || 1} item(s)</p>
+                              <p className="text-2xs text-cm-muted">Direct Resale Purchase</p>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Financial Amounts */}
+                        <div className="p-3.5 rounded-2xl bg-cm-soft/50 border border-cm-border space-y-1">
+                          <p className="text-[10px] uppercase tracking-wider font-bold text-cm-muted">Payment Calculation</p>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-cm-muted">Total Amount:</span>
+                            <span className="font-bold text-cm-black">₹{p.totalAmount}</span>
+                          </div>
+                          {isRent ? (
+                            <>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="font-bold text-amber-700">₹50 Advance (Booking):</span>
+                                <span className="font-bold text-amber-700">₹{p.advanceAmount || 50}</span>
+                              </div>
+                              <div className="flex justify-between items-center text-xs">
+                                <span className="text-cm-muted">Remaining at Handover:</span>
+                                <span className="font-semibold text-cm-black">₹{p.remainingAmount}</span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="font-bold text-blue-700">Expected Total:</span>
+                              <span className="font-bold text-blue-700">₹{p.expectedAmount}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Payment Proof / Notes / Verification History */}
+                      {(p.transactionReference || p.paymentProofUrl || p.customerNotes || p.verifiedAt || p.rejectionReason) && (
+                        <div className="p-3.5 rounded-2xl bg-white border border-cm-border/80 text-xs space-y-1.5">
+                          {p.transactionReference && (
+                            <p>
+                              <strong className="text-cm-black">UTR / Transaction Ref:</strong>{" "}
+                              <span className="font-mono bg-cm-soft px-2 py-0.5 rounded text-2xs">{p.transactionReference}</span>
+                            </p>
+                          )}
+                          {p.customerNotes && (
+                            <p className="text-2xs text-cm-muted">
+                              <strong>Customer Note:</strong> {p.customerNotes}
+                            </p>
+                          )}
+                          {p.verifiedAt && (
+                            <p className="text-2xs text-emerald-700 font-semibold">
+                              ✓ Verified by {p.verifiedBy?.name || "Admin"} on {new Date(p.verifiedAt).toLocaleString()}
+                              {p.adminNotes && ` — "${p.adminNotes}"`}
+                            </p>
+                          )}
+                          {p.rejectionReason && (
+                            <p className="text-2xs text-cm-red font-semibold">
+                              ✕ Rejection Reason: {p.rejectionReason}
+                              {p.adminNotes && ` — "${p.adminNotes}"`}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-cm-border">
+                        <div className="flex items-center gap-2">
+                          {/* Share Payment QR / Instructions on WhatsApp button */}
+                          {businessConfig.whatsappNumber && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const phone = (p.customer?.phone || "").replace(/[^0-9]/g, "");
+                                const msg = isRent
+                                  ? `Hello ${p.customer?.name || ""}! Regarding your rental request for *${p.product?.name}* (Ref: ${p.customerReference}):\nPlease pay the ₹50 booking advance to confirm your rental dates (${p.rentalStartDate} to ${p.rentalEndDate}).\n\nOfficial UPI ID: ${businessConfig.upiId || "N/A"}\nPayment QR: ${businessConfig.paymentQrUrl || "Available on request"}\n\nRemaining ₹${p.remainingAmount} is payable in cash at handover!`
+                                  : `Hello ${p.customer?.name || ""}! Regarding your purchase request for *${p.product?.name}* (Ref: ${p.customerReference}):\nPlease pay the total amount ₹${p.totalAmount} to complete your order.\n\nOfficial UPI ID: ${businessConfig.upiId || "N/A"}\nPayment QR: ${businessConfig.paymentQrUrl || "Available on request"}`;
+                                const url = phone
+                                  ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+                                  : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+                                window.open(url, "_blank");
+                              }}
+                              className="px-3.5 py-1.5 rounded-full border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <MessageCircle size={14} />
+                              <span>Send Payment Info on WhatsApp</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {p.status !== "Verified" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setVerifyModal({
+                                  open: true,
+                                  payment: p,
+                                  confirmed: false,
+                                  transactionReference: p.transactionReference || "",
+                                  notes: ""
+                                })
+                              }
+                              className="px-4 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <ShieldCheck size={14} />
+                              <span>Verify Payment</span>
+                            </button>
+                          )}
+
+                          {p.status !== "Rejected" && p.status !== "Cancelled" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setRejectModal({
+                                  open: true,
+                                  payment: p,
+                                  rejectionReason: "Payment not received in account",
+                                  notes: ""
+                                })
+                              }
+                              className="px-3.5 py-1.5 rounded-full border border-cm-border text-cm-red hover:bg-red-50 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <X size={14} />
+                              <span>Reject</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ── TAB 5: WHATSAPP & PAYMENT QR CONFIGURATION ────────────────────────── */}
+      {activeTab === "settings" && (
+        <div className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm space-y-6 max-w-3xl">
+          <div className="pb-4 border-b border-cm-border">
+            <h3 className="text-xl font-display font-bold text-cm-black">
+              Official WhatsApp & Payment QR Management
+            </h3>
+            <p className="text-xs text-cm-muted">
+              Configure your business phone number and official payment QR code for automated customer enquiry links
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveConfig} className="space-y-6">
+            {/* WhatsApp Business Phone Number */}
+            <div className="space-y-1.5 text-left">
+              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                Official Business WhatsApp Phone Number <span className="text-cm-red">*</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. 919876543210 (with country code, no + or spaces)"
+                  value={businessConfig.whatsappNumber}
+                  onChange={(e) => setBusinessConfig((c) => ({ ...c, whatsappNumber: e.target.value }))}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black font-mono"
+                />
+                {businessConfig.whatsappNumber && (
+                  <a
+                    href={`https://wa.me/${businessConfig.whatsappNumber.replace(/[^0-9]/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shrink-0"
+                  >
+                    <ExternalLink size={14} /> Test Link
+                  </a>
+                )}
+              </div>
+              <p className="text-2xs text-cm-muted">
+                Format: International country code + mobile number (e.g. India is 91 followed by 10 digits). Do not include + or dashes.
+              </p>
+            </div>
+
+            {/* Official Payment QR Code */}
+            <div className="space-y-2 text-left p-4 rounded-2xl bg-cm-soft/50 border border-cm-border">
+              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black block">
+                Official Payment QR Code
+              </label>
+              <p className="text-2xs text-cm-muted">
+                Upload your official UPI QR code (Google Pay, PhonePe, Paytm, or bank UPI). Customers can scan this to pay the ₹50 booking advance or buy resale items.
+              </p>
+
+              {businessConfig.paymentQrUrl ? (
+                <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+                  <div className="w-40 h-40 p-2 bg-white rounded-2xl border border-cm-border flex items-center justify-center shrink-0">
+                    <img
+                      src={businessConfig.paymentQrUrl}
+                      alt="Business Payment QR"
+                      className="w-full h-full object-contain rounded-xl"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-emerald-700 flex items-center gap-1">
+                      <ShieldCheck size={14} /> QR Code is currently active
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <a
+                        href={businessConfig.paymentQrUrl}
+                        download="cloth-market-payment-qr.png"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-xl border border-cm-border bg-white text-xs font-bold text-cm-black hover:bg-cm-soft flex items-center gap-1.5"
+                      >
+                        <Download size={13} /> Download QR
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => qrInputRef.current?.click()}
+                        disabled={uploadingQr}
+                        className="px-3 py-1.5 rounded-xl bg-cm-black text-white text-xs font-bold hover:bg-neutral-800 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <QrCode size={13} /> {uploadingQr ? "Uploading..." : "Replace QR"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 border-2 border-dashed border-cm-border rounded-2xl text-center space-y-3 bg-white">
+                  <QrCode size={36} className="mx-auto text-cm-muted" />
+                  <p className="text-xs text-cm-muted">No QR code uploaded yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => qrInputRef.current?.click()}
+                    disabled={uploadingQr}
+                    className="px-4 py-2 rounded-full bg-cm-black text-white text-xs font-bold hover:bg-neutral-800 disabled:opacity-50 inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <QrCode size={14} /> {uploadingQr ? "Uploading..." : "Upload QR Image"}
+                  </button>
+                </div>
+              )}
+
+              {/* Hidden file input */}
+              <input
+                ref={qrInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleQrFileUpload}
+                className="hidden"
+              />
+            </div>
+
+            {/* Official UPI ID */}
+            <div className="space-y-1 text-left">
+              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">Official UPI ID (VPA)</label>
+              <input
+                type="text"
+                placeholder="e.g. clothmarket@upi or shop@okhdfcbank"
+                value={businessConfig.upiId}
+                onChange={(e) => setBusinessConfig((c) => ({ ...c, upiId: e.target.value }))}
+                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black font-mono"
+              />
+            </div>
+
+            {/* Payment Instructions */}
+            <div className="space-y-1 text-left">
+              <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                Payment Instructions for Customers
+              </label>
+              <textarea
+                rows={3}
+                placeholder="Step 1: Scan the QR code to pay ₹50 booking advance. Step 2: Share transaction screenshot on WhatsApp..."
+                value={businessConfig.paymentInstructions}
+                onChange={(e) => setBusinessConfig((c) => ({ ...c, paymentInstructions: e.target.value }))}
+                className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={savingConfig}
+              className="btn btn-primary w-full py-3.5 text-sm font-semibold rounded-2xl shadow-lg disabled:opacity-50"
+            >
+              {savingConfig ? "Saving Settings..." : "Save WhatsApp & Payment Settings"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* ── VERIFY PAYMENT MODAL ─────────────────────────────────────────────── */}
+      {verifyModal.open && verifyModal.payment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-cm-border shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center pb-3 border-b border-cm-border">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-emerald-50 text-emerald-700">
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-cm-black">Verify Customer Payment</h3>
+                  <p className="text-2xs text-cm-muted">Confirm actual receipt in bank/UPI</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setVerifyModal({ open: false, payment: null, confirmed: false, transactionReference: "", notes: "" })}
+                className="p-1.5 rounded-full hover:bg-cm-soft text-cm-muted cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifyPaymentSubmit} className="space-y-4">
+              <div className="p-3.5 rounded-2xl bg-cm-soft border border-cm-border text-xs space-y-1.5">
+                <p>
+                  <strong>Customer:</strong> {verifyModal.payment.customer?.name} ({verifyModal.payment.customer?.phone || verifyModal.payment.customer?.email})
+                </p>
+                <p>
+                  <strong>Cloth:</strong> {verifyModal.payment.product?.name} (Size: {verifyModal.payment.size})
+                </p>
+                <p>
+                  <strong>Transaction:</strong> {verifyModal.payment.transactionType === "RENT" ? "Rental Booking Advance" : "Resale Purchase"}
+                </p>
+                <div className="pt-1 border-t border-cm-border flex justify-between items-center text-sm font-bold">
+                  <span>Amount to Verify:</span>
+                  <span className="text-emerald-700 text-base">
+                    ₹{verifyModal.payment.expectedAmount || (verifyModal.payment.transactionType === "RENT" ? 50 : verifyModal.payment.totalAmount)}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                  Transaction / UTR Reference Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. 123456789012 or UPI Ref"
+                  value={verifyModal.transactionReference}
+                  onChange={(e) => setVerifyModal((c) => ({ ...c, transactionReference: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-cm-border font-mono"
+                />
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                  Internal Verification Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Notes about verification..."
+                  value={verifyModal.notes}
+                  onChange={(e) => setVerifyModal((c) => ({ ...c, notes: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-cm-border"
+                />
+              </div>
+
+              {/* Explicit Mandatory Checkbox */}
+              <label className="flex items-start gap-2.5 p-3 rounded-2xl bg-emerald-50 border border-emerald-200 cursor-pointer text-xs text-emerald-900 select-none">
+                <input
+                  type="checkbox"
+                  required
+                  checked={verifyModal.confirmed}
+                  onChange={(e) => setVerifyModal((c) => ({ ...c, confirmed: e.target.checked }))}
+                  className="mt-0.5 rounded border-emerald-400 text-emerald-700 focus:ring-0 cursor-pointer"
+                />
+                <span className="font-semibold leading-relaxed">
+                  I explicitly confirm that I have verified receipt of this payment in our bank account / UPI app.
+                </span>
+              </label>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setVerifyModal({ open: false, payment: null, confirmed: false, transactionReference: "", notes: "" })}
+                  className="px-4 py-2 rounded-full border border-cm-border text-xs font-semibold text-cm-black hover:bg-cm-soft cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!verifyModal.confirmed || verifyingPayment}
+                  className="px-5 py-2 rounded-full bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {verifyingPayment ? "Verifying..." : "Confirm Verification"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── REJECT PAYMENT MODAL ─────────────────────────────────────────────── */}
+      {rejectModal.open && rejectModal.payment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 border border-cm-border shadow-2xl space-y-4 my-8">
+            <div className="flex justify-between items-center pb-3 border-b border-cm-border">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-full bg-red-50 text-cm-red">
+                  <X size={20} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-cm-black">Reject Payment</h3>
+                  <p className="text-2xs text-cm-muted">Mark transaction as rejected</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectModal({ open: false, payment: null, rejectionReason: "", notes: "" })}
+                className="p-1.5 rounded-full hover:bg-cm-soft text-cm-muted cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleRejectPaymentSubmit} className="space-y-4">
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                  Reason for Rejection <span className="text-cm-red">*</span>
+                </label>
+                <select
+                  value={rejectModal.rejectionReason}
+                  onChange={(e) => setRejectModal((c) => ({ ...c, rejectionReason: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-cm-border bg-white"
+                >
+                  <option value="Payment not received in account">Payment not received in bank/UPI account</option>
+                  <option value="Incorrect amount paid">Incorrect amount paid</option>
+                  <option value="Invalid or fake transaction screenshot">Invalid or fake transaction screenshot</option>
+                  <option value="Booking date unavailable / conflict">Booking date unavailable / conflict</option>
+                  <option value="Customer requested cancellation">Customer requested cancellation</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="space-y-1 text-left">
+                <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">
+                  Additional Notes
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Explain rejection details for records..."
+                  value={rejectModal.notes}
+                  onChange={(e) => setRejectModal((c) => ({ ...c, notes: e.target.value }))}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-cm-border"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setRejectModal({ open: false, payment: null, rejectionReason: "", notes: "" })}
+                  className="px-4 py-2 rounded-full border border-cm-border text-xs font-semibold text-cm-black hover:bg-cm-soft cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!rejectModal.rejectionReason.trim() || verifyingPayment}
+                  className="px-5 py-2 rounded-full bg-cm-red text-white text-xs font-bold hover:bg-red-700 shadow-sm disabled:opacity-50 cursor-pointer"
+                >
+                  {verifyingPayment ? "Rejecting..." : "Confirm Rejection"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* ── INSPECTION MODAL (Handover or Return) ────────────────────────────── */}

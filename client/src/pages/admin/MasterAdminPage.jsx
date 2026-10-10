@@ -19,6 +19,7 @@ export default function MasterAdminPage() {
   const [admins, setAdmins] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [message, setMessage] = useState("");
 
   // Create Admin Form
@@ -37,6 +38,12 @@ export default function MasterAdminPage() {
       setAdmins(adminsRes.data.data || []);
       setAuditLogs(logsRes.data.data || []);
     } catch (err) {
+      if ([401, 403].includes(err.response?.status)) {
+        setUnauthorized(true);
+        setAnalytics(null);
+        setAdmins([]);
+        setAuditLogs([]);
+      }
       setMessage(`❌ ${err.response?.data?.message || "Failed to load master admin console."}`);
     } finally {
       setLoading(false);
@@ -83,6 +90,26 @@ export default function MasterAdminPage() {
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || "Failed to delete Admin."}`);
     }
+  }
+
+  if (unauthorized) {
+    return (
+      <div className="rounded-3xl bg-white border border-red-200 p-12 text-center shadow-sm max-w-xl mx-auto my-12">
+        <div className="w-16 h-16 rounded-full bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+          <ShieldAlert size={32} />
+        </div>
+        <h2 className="text-xl font-display font-bold text-cm-black">Master Admin Access Denied</h2>
+        <p className="text-sm text-cm-muted mt-2">
+          You do not have Master Admin privileges to access this console. This request has been rejected by server-side role authorization.
+        </p>
+        <button
+          onClick={() => (window.location.href = "/")}
+          className="mt-6 px-6 py-2.5 rounded-full bg-cm-black text-white text-xs font-bold hover:bg-neutral-800 transition cursor-pointer"
+        >
+          Return to Storefront
+        </button>
+      </div>
+    );
   }
 
   return (

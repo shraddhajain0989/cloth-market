@@ -66,6 +66,10 @@ export async function login(req, res) {
   const passwordOk = await bcrypt.compare(password, user.password);
   if (!passwordOk) return fail(res, 401, "Invalid email or password.");
 
+  if (user.status === "disabled") {
+    return fail(res, 403, "Your account has been disabled. Contact Master Admin.");
+  }
+
   const accessToken = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
 
@@ -86,6 +90,10 @@ export async function refresh(req, res) {
     const payload = jwt.verify(refreshToken, env.jwtRefreshSecret);
     const user = await User.findOne({ _id: payload.sub, refreshTokens: refreshToken });
     if (!user) return fail(res, 401, "Refresh token is invalid or revoked.");
+
+    if (user.status === "disabled") {
+      return fail(res, 403, "Your account has been disabled. Contact Master Admin.");
+    }
 
     const newAccessToken = signAccessToken(user);
     return ok(res, { accessToken: newAccessToken, refreshToken }, "Session refreshed.");

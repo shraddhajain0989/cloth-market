@@ -1,7 +1,9 @@
 import { Product } from "../models/Product.js";
 import { Rental } from "../models/Rental.js";
+import { Payment } from "../models/Payment.js";
 import { logAction } from "../models/AuditLog.js";
 import { fail, ok } from "../utils/respond.js";
+import { reconcileLegacyRentals, releaseRentalSlot } from "../utils/rentalReservation.js";
 
 /**
  * List rentals: Customer can ONLY see their own rentals (Customer Data Isolation).
@@ -55,15 +57,14 @@ export async function checkAvailability(req, res) {
   const pickupStr = start.toISOString().split("T")[0];
   const returnStr = end.toISOString().split("T")[0];
 
-  // Count overlapping active rentals for this product and size
-  const overlappingCount = await Rental.countDocuments({
-    clothId: product.id,
-    size,
-    rentalStatus: { $nin: ["CANCELLED", "COMPLETED"] },
-    $or: [
-      { rentalStartDate: { $lte: returnStr }, currentEndDate: { $gte: pickupStr } }
-    ]
-  });
+  // Reconcile legacy operational rentals onto product
+  await reconcileLegacyRentals(product);
+  const freshProduct = await Product.findById(productId);
+
+  const overlappingReservations = freshProduct?.activeRentals?.filter(
+    (r) => r.size === size && r.startDate <= returnStr && r.endDate >= pickupStr
+  ) || [];
+  const overlappingCount = overlappingReservations.length;
 
   const availableUnits = Math.max(0, sizeStock - overlappingCount);
   const isAvailable = availableUnits > 0;
@@ -291,17 +292,19 @@ export async function requestExtension(req, res) {
   const variant = product?.sizeVariants?.find((v) => v.size === rental.size);
   const sizeStock = variant ? variant.stock : (product?.stock || 1);
 
-  const overlappingCount = await Rental.countDocuments({
-    clothId: rental.clothId,
-    size: rental.size,
-    _id: { $ne: rental.id },
-    rentalStatus: { $nin: ["CANCELLED", "COMPLETED"] },
-    $or: [
-      { rentalStartDate: { $lte: newEndStr }, currentEndDate: { $gte: currentEndStr } }
-    ]
-  });
+  // Reconcile legacy operational rentals onto product
+  await reconcileLegacyRentals(product);
+  const freshProduct = await Product.findById(rental.clothId);
 
-  if (overlappingCount >= sizeStock) {
+  const overlappingReservations = freshProduct?.activeRentals?.filter(
+    (r) =>
+      String(r.rentalId) !== String(rental.id) &&
+      r.size === rental.size &&
+      r.startDate <= newEndStr &&
+      r.endDate >= currentEndStr
+  ) || [];
+
+  if (overlappingReservations.length >= sizeStock) {
     return fail(res, 400, "Item is already booked by another customer for the requested extension dates.");
   }
 
@@ -326,4 +329,139 @@ export async function requestExtension(req, res) {
   });
 
   return ok(res, rental, "Extension requested. Waiting for Admin approval.");
+}
+
+export const CANCELLABLE_RENTAL_STATUSES = [
+  "PENDING_ADVANCE",
+  "CONFIRMED",
+  "READY_FOR_HANDOVER"
+];
+
+export const NON_CANCELLABLE_OPERATIONAL_STATUSES = [
+  "HANDOVER_INSPECTION",
+  "ACTIVE_RENTAL",
+  "EXTENSION_REQUESTED",
+  "EXTENDED",
+  "RETURN_INSPECTION",
+  "DAMAGE_REPORTED",
+  "DAMAGE_SETTLEMENT"
+];
+
+/**
+ * Cancel a rental and release its inventory reservation safely.
+ * - Validates allowed source statuses
+ * - Prevents cancelling already completed or cancelled rentals
+ * - Blocks cancelling active operational rentals (preserves inventory while in customer possession/inspection)
+ * - Atomic conditional update prevents concurrent cancellation races
+ * - Reversible compensation rollback if reservation release fails
+ */
+export async function cancelRental(req, res) {
+  const { id } = req.params;
+  const rental = await Rental.findById(id);
+  if (!rental) return fail(res, 404, "Rental not found.");
+
+  if (rental.rentalStatus === "COMPLETED") {
+    return fail(res, 400, "Cannot cancel a completed rental.");
+  }
+  if (rental.rentalStatus === "CANCELLED") {
+    return fail(res, 400, "Rental is already cancelled.");
+  }
+  if (NON_CANCELLABLE_OPERATIONAL_STATUSES.includes(rental.rentalStatus)) {
+    return fail(
+      res,
+      400,
+      `Cannot cancel an operational rental in '${rental.rentalStatus}' state: item is currently in possession or inspection.`
+    );
+  }
+  if (!CANCELLABLE_RENTAL_STATUSES.includes(rental.rentalStatus)) {
+    return fail(
+      res,
+      400,
+      `Rental status '${rental.rentalStatus}' is not eligible for cancellation.`
+    );
+  }
+
+  const originalStatus = rental.rentalStatus;
+
+  // Atomic conditional update: ensures only one concurrent request succeeds
+  const updatedRental = await Rental.findOneAndUpdate(
+    {
+      _id: id,
+      rentalStatus: { $in: CANCELLABLE_RENTAL_STATUSES }
+    },
+    {
+      $set: {
+        rentalStatus: "CANCELLED",
+        status: "CANCELLED"
+      }
+    },
+    { new: true }
+  );
+
+  if (!updatedRental) {
+    const recheck = await Rental.findById(id);
+    if (recheck?.rentalStatus === "CANCELLED") {
+      return fail(res, 400, "Rental is already cancelled.");
+    }
+    if (recheck?.rentalStatus === "COMPLETED") {
+      return fail(res, 400, "Cannot cancel a completed rental.");
+    }
+    if (NON_CANCELLABLE_OPERATIONAL_STATUSES.includes(recheck?.rentalStatus)) {
+      return fail(
+        res,
+        400,
+        `Cannot cancel an operational rental in '${recheck?.rentalStatus}' state.`
+      );
+    }
+    return fail(res, 400, "Rental could not be cancelled in its current state.");
+  }
+
+  // Release reserved inventory slot
+  const clothId = updatedRental.clothId || updatedRental.productId;
+  let releaseResult = null;
+  if (clothId) {
+    try {
+      releaseResult = await releaseRentalSlot(clothId, updatedRental._id);
+    } catch (err) {
+      releaseResult = { success: false, error: err.message };
+    }
+  } else {
+    releaseResult = { success: false, reason: "missing_cloth_id" };
+  }
+
+  // If reservation release failed, roll back cancellation to prevent orphaned/inconsistent inventory
+  if (releaseResult && !releaseResult.success) {
+    await Rental.findOneAndUpdate(
+      { _id: id, rentalStatus: "CANCELLED" },
+      { $set: { rentalStatus: originalStatus, status: originalStatus } }
+    );
+    return fail(
+      res,
+      500,
+      `Failed to release inventory reservation (${releaseResult.reason || releaseResult.error || "unknown error"}). Cancellation rolled back to maintain consistency.`
+    );
+  }
+
+  // Clean up any pending unverified payments linked to this rental
+  await Payment.updateMany(
+    {
+      rentalId: String(updatedRental._id),
+      status: { $in: ["Enquiry Initiated", "Awaiting Confirmation", "Awaiting Payment", "Payment Reported"] }
+    },
+    { $set: { status: "Cancelled" } }
+  );
+
+  await logAction({
+    actorId: req.user?.id || req.user?._id || "admin",
+    actorRole: req.user?.role || "admin",
+    action: "admin_cancelled_rental",
+    targetId: updatedRental.id,
+    metadata: {
+      clothId,
+      originalStatus,
+      reservationReleased: releaseResult?.released || false
+    }
+  });
+
+  return ok(res, updatedRental, "Rental cancelled and reservation released.");
 }

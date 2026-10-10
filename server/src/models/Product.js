@@ -26,13 +26,35 @@ const productSchema = new mongoose.Schema(
     badge: String,
     rating: { type: Number, default: 0 },
     reviewsCount: { type: Number, default: 0 },
-    available: { type: Boolean, default: true }
+    available: { type: Boolean, default: true },
+    listingType: {
+      type: String,
+      enum: ["RENT", "RESELL", "BOTH"],
+      default: "RENT"
+    },
+    condition: {
+      type: String,
+      enum: ["New with tags", "Like new", "Gently used"],
+      default: "Like new"
+    },
+    activeRentals: [
+      {
+        rentalId: { type: String, required: true },
+        size: { type: String, required: true },
+        unitIndex: { type: Number, default: 1 },
+        startDate: { type: String, required: true },
+        endDate: { type: String, required: true }
+      }
+    ]
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
 
 // Pre-save hook: sync total stock and sizes array from sizeVariants
 productSchema.pre("save", function (next) {
+  if (!this.listingType) {
+    this.listingType = "RENT";
+  }
   if (this.sizeVariants && this.sizeVariants.length > 0) {
     this.stock = this.sizeVariants.reduce((sum, v) => sum + (v.stock || 0), 0);
     this.sizes = this.sizeVariants.map((v) => v.size);

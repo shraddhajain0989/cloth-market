@@ -5,6 +5,7 @@ import { productApi, rentalApi } from "../../api/endpoints";
 import { useAuthStore } from "../../store/authStore";
 import ProductCard from "../../components/product/ProductCard";
 import RentalModal from "../../components/product/RentalModal";
+import ProductDetailModal from "../../components/product/ProductDetailModal";
 
 const CATEGORY_CHIPS = [
   "All",
@@ -32,6 +33,8 @@ export default function HomePage() {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rentalProduct, setRentalProduct] = useState(null);
+  const [detailProduct, setDetailProduct] = useState(null);
+  const [detailMode, setDetailMode] = useState("rent");
   const [renting, setRenting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -286,7 +289,18 @@ export default function HomePage() {
               <ProductCard
                 key={product.id || product._id}
                 product={product}
-                onRent={setRentalProduct}
+                onSelect={(p) => {
+                  setDetailProduct(p);
+                  setDetailMode("rent");
+                }}
+                onRent={(p) => {
+                  setDetailProduct(p);
+                  setDetailMode("rent");
+                }}
+                onBuy={(p) => {
+                  setDetailProduct(p);
+                  setDetailMode("buy");
+                }}
               />
             ))}
           </div>
@@ -300,6 +314,14 @@ export default function HomePage() {
         onClose={() => setRentalProduct(null)}
         onSubmit={handleRental}
         loading={renting}
+      />
+
+      {/* 6. Complete 5-Image Gallery & WhatsApp Rental/Resale Modal */}
+      <ProductDetailModal
+        product={detailProduct}
+        open={Boolean(detailProduct)}
+        initialMode={detailMode}
+        onClose={() => setDetailProduct(null)}
       />
     </div>
   );

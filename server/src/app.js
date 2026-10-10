@@ -18,6 +18,8 @@ import rentalRoutes from "./routes/rentalRoutes.js";
 import socialRoutes from "./routes/socialRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
+import configRoutes from "./routes/configRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 
 export function createApp() {
   const app = express();
@@ -75,6 +77,8 @@ export function createApp() {
   app.use("/api/social", socialRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/upload", uploadRoutes);
+  app.use("/api/config", configRoutes);
+  app.use("/api/payments", paymentRoutes);
 
   app.use(notFound);
   app.use(errorHandler);

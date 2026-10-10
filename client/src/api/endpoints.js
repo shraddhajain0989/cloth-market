@@ -83,5 +83,36 @@ export const uploadApi = {
     return api.post("/upload/image", formData, {
       headers: { "Content-Type": "multipart/form-data" }
     });
+  },
+  images: (files) => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("images", file);
+    }
+    return api.post("/upload/images", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
+  },
+  qr: (file) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    return api.post("/upload/qr", formData, {
+      headers: { "Content-Type": "multipart/form-data" }
+    });
   }
+};
+
+export const configApi = {
+  getPublic: () => api.get("/config/public"),
+  getAdmin: () => api.get("/config/admin"),
+  updateAdmin: (payload) => api.put("/config/admin", payload)
+};
+
+export const paymentApi = {
+  list: (params) => api.get("/payments", { params }),
+  get: (id) => api.get(`/payments/${id}`),
+  create: (payload) => api.post("/payments", payload),
+  verify: (id, payload) => api.patch(`/payments/${id}/verify`, payload),
+  reject: (id, payload) => api.patch(`/payments/${id}/reject`, payload),
+  cancel: (id) => api.patch(`/payments/${id}/cancel`)
 };

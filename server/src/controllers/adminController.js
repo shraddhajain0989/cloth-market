@@ -3,6 +3,7 @@ import { Product } from "../models/Product.js";
 import { Rental } from "../models/Rental.js";
 import { User } from "../models/User.js";
 import { logAction } from "../models/AuditLog.js";
+import { reserveRentalSlot, releaseRentalSlot, extendRentalSlot } from "../utils/rentalReservation.js";
 import { fail, ok } from "../utils/respond.js";
 
 export async function getDashboard(_req, res) {
@@ -93,19 +94,41 @@ export async function confirmAdvance(req, res) {
     return fail(res, 400, "Advance payment has already been recorded as received.");
   }
 
-  rental.advanceStatus = "ADVANCE_RECEIVED";
-  rental.rentalStatus = "CONFIRMED";
-  await rental.save();
+  if (rental.rentalStatus === "CANCELLED") {
+    return fail(res, 400, "Cannot confirm advance for a cancelled rental.");
+  }
+
+  try {
+    await reserveRentalSlot(rental);
+  } catch (err) {
+    return fail(res, 400, err.message);
+  }
+
+  // Atomically update rental status
+  const updatedRental = await Rental.findOneAndUpdate(
+    { _id: rental._id, advanceStatus: "ADVANCE_PENDING" },
+    { $set: { advanceStatus: "ADVANCE_RECEIVED", rentalStatus: "CONFIRMED" } },
+    { new: true }
+  );
+
+  if (!updatedRental) {
+    const recheck = await Rental.findById(rental._id);
+    if (recheck?.advanceStatus === "ADVANCE_RECEIVED") {
+      return fail(res, 400, "Advance payment has already been recorded as received.");
+    }
+    await releaseRentalSlot(rental.clothId, rental._id);
+    return fail(res, 400, "Rental status could not be updated.");
+  }
 
   await logAction({
     actorId: req.user.id,
     actorRole: req.user.role,
     action: "admin_confirmed_advance",
-    targetId: rental.id,
-    metadata: { advanceAmount: rental.advanceAmount }
+    targetId: updatedRental.id,
+    metadata: { advanceAmount: updatedRental.advanceAmount }
   });
 
-  return ok(res, rental, "Advance recorded as received. Rental confirmed.");
+  return ok(res, updatedRental, "Advance recorded as received. Rental confirmed.");
 }
 
 /**
@@ -187,6 +210,7 @@ export async function recordRemainingPayment(req, res) {
 
 /**
  * Admin reviews and approves or rejects a customer extension request.
+ * Atomically verifies and updates Product.activeRentals reservation slot.
  */
 export async function reviewExtension(req, res) {
   const { decision } = req.body; // "APPROVED" or "REJECTED"
@@ -195,13 +219,23 @@ export async function reviewExtension(req, res) {
 
   const pendingExtension = rental.extensionHistory.find((e) => e.status === "REQUESTED");
   if (!pendingExtension) {
+    if (decision === "APPROVED" && rental.rentalStatus === "EXTENDED") {
+      return ok(res, rental, "Extension has already been approved.");
+    }
     return fail(res, 400, "No pending extension request found for this rental.");
   }
 
   if (decision === "APPROVED") {
+    // Atomically revalidate availability and update the reservation slot on the Product
+    try {
+      await extendRentalSlot(rental, pendingExtension.requestedEndDate);
+    } catch (err) {
+      return fail(res, 400, `Cannot approve extension: ${err.message}`);
+    }
+
     pendingExtension.status = "APPROVED";
     pendingExtension.reviewedAt = new Date();
-    pendingExtension.reviewedBy = req.user.name;
+    pendingExtension.reviewedBy = req.user.name || "Admin";
 
     rental.currentEndDate = pendingExtension.requestedEndDate;
     rental.extensionAmount = (rental.extensionAmount || 0) + pendingExtension.additionalAmount;
@@ -211,7 +245,7 @@ export async function reviewExtension(req, res) {
   } else {
     pendingExtension.status = "REJECTED";
     pendingExtension.reviewedAt = new Date();
-    pendingExtension.reviewedBy = req.user.name;
+    pendingExtension.reviewedBy = req.user.name || "Admin";
     rental.rentalStatus = "ACTIVE_RENTAL";
   }
 
@@ -345,6 +379,9 @@ export async function completeRental(req, res) {
   rental.rentalStatus = "COMPLETED";
   await rental.save();
 
+  // Release reservation slot
+  await releaseRentalSlot(rental.clothId, rental._id);
+
   await logAction({
     actorId: req.user.id,
     actorRole: req.user.role,
@@ -354,6 +391,13 @@ export async function completeRental(req, res) {
 
   return ok(res, rental, "Rental marked as COMPLETED.");
 }
+
+/**
+ * Admin cancels rental and releases reserved inventory.
+ * Uses hardened implementation from rentalController with atomic concurrency,
+ * operational status guards, and reservation-release rollback.
+ */
+export { cancelRental } from "./rentalController.js";
 
 export const OPERATIONAL_RENTAL_STATUSES = [
   "PENDING_ADVANCE",

@@ -37,7 +37,7 @@ export default function App() {
           }
         />
 
-        {/* Dedicated Admin Route (/admin) */}
+        {/* Dedicated Admin Routes (/admin and /admin/*) */}
         <Route
           path="/admin"
           element={
@@ -46,10 +46,26 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/admin/*"
+          element={
+            <ProtectedRoute roles={["admin", "master"]} loginPath="/admin/login">
+              <AdminPage />
+            </ProtectedRoute>
+          }
+        />
 
-        {/* Dedicated Master Admin Route (/master-admin) */}
+        {/* Dedicated Master Admin Routes (/master-admin and /master-admin/*) */}
         <Route
           path="/master-admin"
+          element={
+            <ProtectedRoute roles={["master"]} loginPath="/master-admin/login">
+              <MasterAdminPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/master-admin/*"
           element={
             <ProtectedRoute roles={["master"]} loginPath="/master-admin/login">
               <MasterAdminPage />

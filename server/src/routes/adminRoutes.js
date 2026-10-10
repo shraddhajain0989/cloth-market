@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   bulkRemoveProducts,
   completeRental,
+  cancelRental,
   confirmAdvance,
   getDashboard,
   listAdminRentals,
@@ -12,6 +13,13 @@ import {
   resolveDamage,
   reviewExtension
 } from "../controllers/adminController.js";
+import {
+  listPayments,
+  getPayment,
+  verifyPayment,
+  rejectPayment,
+  cancelPayment
+} from "../controllers/paymentController.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
@@ -29,6 +37,18 @@ router.post("/rentals/:id/return-inspection", recordReturnInspection);
 router.post("/rentals/:id/damage", reportDamage);
 router.patch("/rentals/:id/damage/resolve", resolveDamage);
 router.patch("/rentals/:id/complete", completeRental);
+router.patch("/rentals/:id/cancel", cancelRental);
+router.post("/rentals/:id/cancel", cancelRental);
 router.delete("/products/bulk", bulkRemoveProducts);
+
+// Payment Management & Manual Verification
+router.get("/payments", listPayments);
+router.get("/payments/:id", getPayment);
+router.patch("/payments/:id/verify", verifyPayment);
+router.post("/payments/:id/verify", verifyPayment);
+router.patch("/payments/:id/reject", rejectPayment);
+router.post("/payments/:id/reject", rejectPayment);
+router.patch("/payments/:id/cancel", cancelPayment);
+router.post("/payments/:id/cancel", cancelPayment);
 
 export default router;

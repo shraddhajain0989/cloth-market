@@ -5,13 +5,11 @@ import { upload, uploadToCloudinary } from "../middleware/upload.js";
 import { env } from "../config/env.js";
 import { ok, fail } from "../utils/respond.js";
 
-export async function uploadImage(req, res) {
-  if (!req.file) return fail(res, 400, "No image file provided.");
+const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
 
-  // Validate allowed extensions and MIME types
-  const allowedMime = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-  if (!allowedMime.includes(req.file.mimetype)) {
-    return fail(res, 400, "Invalid image format. Only JPG, JPEG, PNG, and WEBP are supported.");
+async function processFile(file, req, folder = "cloth-market/products") {
+  if (!ALLOWED_MIME.includes(file.mimetype)) {
+    throw new Error(`Invalid image format (${file.mimetype}). Only JPG, JPEG, PNG, and WEBP are supported.`);
   }
 
   const isProduction = env.nodeEnv === "production";
@@ -20,49 +18,85 @@ export async function uploadImage(req, res) {
   );
 
   // In production, Cloudinary configuration is strictly mandatory.
-  // Local disk writes are prohibited because Render containers have ephemeral filesystems.
   if (isProduction && !hasCloudinary) {
-    return fail(
-      res,
-      500,
-      "Cloudinary configuration missing in production environment. Upload rejected to prevent ephemeral data loss."
-    );
+    throw new Error("Cloudinary configuration missing in production environment. Upload rejected to prevent ephemeral data loss.");
   }
 
   // 1. Cloudinary upload if configured
   if (hasCloudinary) {
     try {
-      const folder = req.body?.folder === "inspections" ? "cloth-market/inspections" : "cloth-market/products";
-      const { url, publicId } = await uploadToCloudinary(req.file.buffer, folder);
-      return ok(res, { url, publicId }, "Image uploaded successfully to Cloudinary.");
+      const { url, publicId } = await uploadToCloudinary(file.buffer, folder);
+      return { url, publicId };
     } catch (err) {
       if (isProduction) {
-        return fail(res, 502, `Cloudinary upload failed in production: ${err.message}`);
+        throw new Error(`Cloudinary upload failed in production: ${err.message}`);
       }
-      console.error("Cloudinary upload failed, falling back to local:", err.message);
+      console.error("Cloudinary upload failed, falling back to local storage:", err.message);
     }
   }
 
   // 2. Local disk storage fallback (ONLY permitted in development / testing)
   if (isProduction) {
-    return fail(res, 500, "Local filesystem storage is prohibited in production environment.");
+    throw new Error("Local filesystem storage is prohibited in production environment.");
+  }
+
+  const uploadDir = path.resolve("public/uploads");
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  const ext = file.mimetype.split("/")[1] || "jpg";
+  const filename = `cloth-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+  const filePath = path.join(uploadDir, filename);
+
+  fs.writeFileSync(filePath, file.buffer);
+  const host = req.get("host") || "localhost:5002";
+  const protocol = req.protocol || "http";
+  const url = `${protocol}://${host}/uploads/${filename}`;
+  return { url, publicId: filename };
+}
+
+export async function uploadImage(req, res) {
+  if (!req.file) return fail(res, 400, "No image file provided.");
+
+  try {
+    const folder = req.body?.folder === "payment-qr"
+      ? "cloth-market/payment-qr"
+      : req.body?.folder === "inspections"
+      ? "cloth-market/inspections"
+      : "cloth-market/products";
+
+    const result = await processFile(req.file, req, folder);
+    return ok(res, result, "Image uploaded successfully.");
+  } catch (err) {
+    const status = err.message.includes("Invalid image format") ? 400 : 500;
+    return fail(res, status, err.message);
+  }
+}
+
+export async function uploadImages(req, res) {
+  const files = req.files;
+  if (!files || !Array.isArray(files) || files.length === 0) {
+    return fail(res, 400, "No image files provided.");
+  }
+
+  if (files.length > 5) {
+    return fail(res, 400, "Maximum of 5 images allowed per upload.");
   }
 
   try {
-    const uploadDir = path.resolve("public/uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
+    const folder = req.body?.folder === "inspections" ? "cloth-market/inspections" : "cloth-market/products";
+    const uploaded = [];
+
+    for (const file of files) {
+      const result = await processFile(file, req, folder);
+      uploaded.push(result);
     }
 
-    const ext = req.file.mimetype.split("/")[1] || "jpg";
-    const filename = `cloth-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
-    const filePath = path.join(uploadDir, filename);
-
-    fs.writeFileSync(filePath, req.file.buffer);
-    const url = `/uploads/${filename}`;
-    return ok(res, { url, publicId: filename }, "Image uploaded successfully (local development).");
+    return ok(res, uploaded, `${uploaded.length} image(s) uploaded successfully.`);
   } catch (err) {
-    return fail(res, 500, `Failed to store image: ${err.message}`);
+    const status = err.message.includes("Invalid image format") ? 400 : 500;
+    return fail(res, status, err.message);
   }
 }
 

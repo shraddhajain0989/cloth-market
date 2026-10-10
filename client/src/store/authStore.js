@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { authApi } from "../api/endpoints";
+import { authApi, userApi } from "../api/endpoints";
 
 const persisted = JSON.parse(localStorage.getItem("cloth-market-auth") || "null");
 
@@ -9,10 +9,27 @@ export const useAuthStore = create((set, get) => ({
   refreshToken: persisted?.refreshToken || null,
   loading: false,
   error: "",
-  bootstrap: () => {
+  bootstrap: async () => {
     const next = JSON.parse(localStorage.getItem("cloth-market-auth") || "null");
     if (next) {
       set({ user: next.user, accessToken: next.accessToken, refreshToken: next.refreshToken });
+      if (next.accessToken) {
+        try {
+          const { data } = await userApi.me();
+          if (data?.data) {
+            const authoritative = data.data;
+            set({ user: authoritative });
+            localStorage.setItem(
+              "cloth-market-auth",
+              JSON.stringify({ ...next, user: authoritative })
+            );
+          }
+        } catch (err) {
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            get().logout();
+          }
+        }
+      }
     }
   },
   setTokens: (accessToken, refreshToken) => {
