@@ -99,19 +99,21 @@ const rentalSchema = new mongoose.Schema(
       durationDays: { type: Number, default: 1 },
       totalRental: { type: Number, default: 0 }
     },
-    advanceAmount: { type: Number, default: 50 }, // ₹50 advance (INCLUDED in total rental amount)
+    advanceAmount: { type: Number, default: 0 },
     advanceStatus: {
       type: String,
       enum: ["ADVANCE_PENDING", "ADVANCE_RECEIVED"],
       default: "ADVANCE_PENDING"
     },
-    remainingAmount: { type: Number, required: true }, // rentalAmount - advanceAmount
+    remainingAmount: { type: Number, default: 0 },
     remainingPaymentStatus: {
       type: String,
       enum: ["REMAINING_PENDING", "REMAINING_RECEIVED"],
       default: "REMAINING_PENDING"
     },
-    paymentMethod: { type: String, default: "CASH" },
+    productReceived: { type: Boolean, default: false },
+    productReceivedAt: { type: Date },
+    paymentMethod: { type: String, default: "MANUAL_WHATSAPP" },
     rentalStatus: {
       type: String,
       enum: [
@@ -169,11 +171,11 @@ rentalSchema.pre("validate", function (next) {
   if (!this.status && this.rentalStatus) this.status = this.rentalStatus;
   if (!this.rentalStatus && this.status) this.rentalStatus = this.status;
   if (!this.productName && this.clothSnapshot?.name) this.productName = this.clothSnapshot.name;
-  if (this.advanceAmount === undefined && this.rentalAmount !== undefined) {
-    this.advanceAmount = Math.min(50, this.rentalAmount);
+  if (this.advanceAmount === undefined) {
+    this.advanceAmount = 0;
   }
-  if (this.remainingAmount === undefined && this.rentalAmount !== undefined) {
-    this.remainingAmount = Math.max(0, this.rentalAmount - (this.advanceAmount || 50));
+  if (this.remainingAmount === undefined) {
+    this.remainingAmount = 0;
   }
   next();
 });
@@ -193,8 +195,8 @@ rentalSchema.pre("save", function (next) {
   if (!this.status) this.status = this.rentalStatus;
   if (!this.rentalStatus) this.rentalStatus = this.status;
   if (!this.productName && this.clothSnapshot?.name) this.productName = this.clothSnapshot.name;
-  if (!this.remainingAmount && this.rentalAmount) {
-    this.remainingAmount = Math.max(0, this.rentalAmount - (this.advanceAmount || 50));
+  if (this.remainingAmount === undefined) {
+    this.remainingAmount = 0;
   }
   next();
 });

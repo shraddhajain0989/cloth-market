@@ -169,12 +169,10 @@ export async function createRental(req, res) {
 
   // Authoritative price calculation:
   // Rental price = dailyRate * durationDays
-  // Advance amount = 50 (INCLUDED in total rental amount, NOT an extra fee)
-  // Remaining amount = rentalAmount - 50
   const dailyRate = product.rentPrice;
   const totalRentalAmount = durationDays * dailyRate;
-  const advanceAmount = 50;
-  const remainingAmount = Math.max(0, totalRentalAmount - advanceAmount);
+  const advanceAmount = 0;
+  const remainingAmount = 0;
 
   const rental = await Rental.create({
     userId: req.user.id,
@@ -202,8 +200,8 @@ export async function createRental(req, res) {
     advanceAmount,
     advanceStatus: "ADVANCE_PENDING",
     remainingAmount,
-    remainingPaymentStatus: "REMAINING_PENDING",
-    paymentMethod: "CASH",
+    remainingPaymentStatus: "REMAINING_RECEIVED",
+    paymentMethod: "MANUAL_WHATSAPP",
     rentalStatus: "PENDING_ADVANCE",
     // Backward compatibility aliases
     durationDays,
@@ -221,7 +219,7 @@ export async function createRental(req, res) {
     metadata: { totalRentalAmount, size, pickupStr, returnStr }
   });
 
-  return ok(res, rental, "Rental booked. Please pay ₹50 advance to Admin to confirm.");
+  return ok(res, rental, "Rental booked. Please complete payment with Admin to confirm.");
 }
 
 /**

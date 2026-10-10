@@ -125,8 +125,6 @@ export default function ProductDetailModal({
 
   const rentDaily = Number(product.rentPrice) || 0;
   const totalRentalAmount = durationDays * rentDaily;
-  const advanceAmount = 50; // ₹50 cash advance included in total rental price
-  const remainingAtHandover = Math.max(0, totalRentalAmount - advanceAmount);
 
   const sellPrice = Number(product.price) || 0;
   const totalBuyAmount = sellPrice * quantity;
@@ -175,6 +173,16 @@ export default function ProductDetailModal({
     let messageText = "";
 
     if (mode === "rent") {
+      if (!startDate || !endDate || isNaN(start.getTime()) || isNaN(end.getTime())) {
+        setErrorMsg("Please select valid rental start and return dates.");
+        return;
+      }
+
+      if (end <= start) {
+        setErrorMsg("Return date must be after pickup date.");
+        return;
+      }
+
       if (availability && !availability.available) {
         setErrorMsg("This outfit is fully booked for the selected dates. Please choose different dates or size.");
         return;
@@ -184,15 +192,13 @@ export default function ProductDetailModal({
 `Hello Cloth Market! I would like to rent this outfit:
 
 *Outfit:* ${product.name}
-*Reference:* ${refCode}
 *Product ID:* ${prodId}
 *Size:* ${selectedSize}
 *Rental Dates:* ${startDate} to ${endDate} (${durationDays} days)
-*Total Rental Fee:* ₹${totalRentalAmount.toLocaleString("en-IN")}
-*Booking Advance to Pay:* ₹${advanceAmount}
-*Balance Due at Handover:* ₹${remainingAtHandover.toLocaleString("en-IN")}
+*Total Rental Price:* ₹${totalRentalAmount.toLocaleString("en-IN")}
+*Reference:* ${refCode}
 
-Please confirm availability and share the payment QR code and payment instructions.`;
+Please confirm availability and share payment instructions.`;
 
       // Log payment tracking record as customer enquiry initiation
       setSubmitting(true);
@@ -206,10 +212,10 @@ Please confirm availability and share the payment QR code and payment instructio
           rentalStartDate: startDate,
           rentalEndDate: endDate,
           rentalDuration: durationDays,
-          expectedAmount: 50,
+          expectedAmount: totalRentalAmount,
           totalAmount: totalRentalAmount,
-          advanceAmount: 50,
-          remainingAmount: remainingAtHandover,
+          advanceAmount: 0,
+          remainingAmount: 0,
           status: "Enquiry Initiated"
         });
       } catch (err) {
@@ -419,14 +425,7 @@ Please confirm availability and share the payment QR code and payment instructio
                   {mode === "rent" && <span className="text-xs font-normal text-cm-muted"> / day</span>}
                 </span>
               </div>
-              {mode === "rent" && (
-                <div className="text-right">
-                  <span className="text-2xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
-                    ₹50 Advance to Book
-                  </span>
-                  <span className="text-3xs text-cm-muted block mt-0.5">Remaining paid at handover</span>
-                </div>
-              )}
+              
             </div>
 
             {/* Form */}
@@ -498,13 +497,9 @@ Please confirm availability and share the payment QR code and payment instructio
                       <span>{durationDays} days × ₹{rentDaily.toLocaleString("en-IN")}</span>
                       <span className="font-semibold text-cm-black">₹{totalRentalAmount.toLocaleString("en-IN")}</span>
                     </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Booking advance (QR / Cash)</span>
-                      <span className="font-semibold text-emerald-700">₹{advanceAmount}</span>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>Due at handover inspection</span>
-                      <span className="font-semibold text-cm-black">₹{remainingAtHandover.toLocaleString("en-IN")}</span>
+                    <div className="pt-1.5 border-t border-slate-200 flex justify-between items-baseline font-bold">
+                      <span className="text-xs uppercase text-slate-500">Total Rental</span>
+                      <span className="text-sm text-cm-black">₹{totalRentalAmount.toLocaleString("en-IN")}</span>
                     </div>
                   </div>
                 </div>
@@ -567,15 +562,15 @@ Please confirm availability and share the payment QR code and payment instructio
                   {product.available === false
                     ? "Currently Unavailable"
                     : mode === "rent"
-                    ? "Rent This Outfit"
+                    ? "Rent Now"
                     : availableStock <= 0
                     ? "Out of Stock"
-                    : "Buy This Outfit"}
+                    : "Buy Now"}
                 </span>
               </button>
 
               <p className="text-center text-3xs text-cm-muted leading-relaxed">
-                Opens WhatsApp with prefilled order details. The administrator will verify availability and share the official payment QR code with you.
+                Opens WhatsApp with prefilled order details. You will send the message manually, and the administrator will share payment instructions.
               </p>
             </form>
           </div>

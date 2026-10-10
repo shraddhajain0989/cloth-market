@@ -10,7 +10,7 @@ export default function Footer() {
               Cloth Market<span className="text-cm-red">.</span>
             </Link>
             <p className="text-xs text-cm-muted mt-1 max-w-sm">
-              Simple, flexible cloth rentals. Reserve designer and occasion wear with ₹50 cash advance.
+              Simple, flexible cloth rentals. Reserve designer and occasion wear with seamless WhatsApp booking.
             </p>
           </div>
 

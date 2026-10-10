@@ -171,9 +171,9 @@ export async function createPayment(req, res) {
 
     const dailyRate = product.rentPrice;
     finalTotal = dailyRate * validatedDuration;
-    finalAdvance = 50; // ₹50 advance included in total rental price
-    finalRemaining = Math.max(0, finalTotal - finalAdvance);
-    finalExpected = finalAdvance; // The customer pays the ₹50 advance first to confirm
+    finalAdvance = 0;
+    finalRemaining = 0;
+    finalExpected = finalTotal; // Full authoritative rental price (no ₹50 advance)
   } else {
     // BUY / RESELL
     const supportsResell =
@@ -402,6 +402,8 @@ export async function verifyPayment(req, res) {
       try {
         await reserveRentalSlot(linkedRental);
         linkedRental.advanceStatus = "ADVANCE_RECEIVED";
+        linkedRental.remainingAmount = 0;
+        linkedRental.remainingPaymentStatus = "REMAINING_RECEIVED";
         linkedRental.rentalStatus = "CONFIRMED";
         await linkedRental.save();
         rentalConfirmedHere = true;

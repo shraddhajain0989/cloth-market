@@ -40,12 +40,17 @@ export async function getMasterAnalytics(_req, res) {
           totalRentalValue: { $sum: "$rentalAmount" },
           advanceCollected: {
             $sum: {
-              $cond: [{ $eq: ["$advanceStatus", "ADVANCE_RECEIVED"] }, "$advanceAmount", 0]
+              $cond: [{ $eq: ["$advanceStatus", "ADVANCE_RECEIVED"] }, "$rentalAmount", 0]
+            }
+          },
+          paymentsCollected: {
+            $sum: {
+              $cond: [{ $eq: ["$advanceStatus", "ADVANCE_RECEIVED"] }, "$rentalAmount", 0]
             }
           },
           outstandingRemaining: {
             $sum: {
-              $cond: [{ $eq: ["$remainingPaymentStatus", "REMAINING_PENDING"] }, "$remainingAmount", 0]
+              $cond: [{ $eq: ["$advanceStatus", "ADVANCE_PENDING"] }, "$rentalAmount", 0]
             }
           }
         }
@@ -77,6 +82,7 @@ export async function getMasterAnalytics(_req, res) {
         extensionRequests,
         totalRentalValue: financials.totalRentalValue,
         advanceCollected: financials.advanceCollected,
+        paymentsCollected: financials.paymentsCollected || financials.advanceCollected,
         outstandingRemaining: financials.outstandingRemaining,
         totalDamageCharges: totalDamage
       },

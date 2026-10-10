@@ -13,7 +13,7 @@ import { rentalApi, userApi } from "../../api/endpoints";
 
 const TIMELINE_STEPS = [
   { key: "PENDING_ADVANCE", label: "Booking Created" },
-  { key: "CONFIRMED", label: "₹50 Advance" },
+  { key: "CONFIRMED", label: "Payment Confirmed" },
   { key: "HANDOVER_INSPECTION", label: "Handover" },
   { key: "ACTIVE_RENTAL", label: "Rental Active" },
   { key: "RETURN_INSPECTION", label: "Return" },
@@ -36,7 +36,7 @@ function getHumanStatus(status) {
       return "Booking Created";
     case "CONFIRMED":
     case "READY_FOR_HANDOVER":
-      return "Advance Confirmed";
+      return "Payment Confirmed";
     case "HANDOVER_INSPECTION":
       return "Handover Inspection";
     case "ACTIVE_RENTAL":
@@ -127,7 +127,7 @@ export default function ProfilePage() {
             My Rentals
           </h1>
           <p className="text-xs sm:text-sm text-cm-muted mt-1">
-            Track your rental bookings, cash advance status, and handover condition.
+            Track your rental bookings, payment status, and handover condition.
           </p>
         </div>
         {profile && (
@@ -220,7 +220,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* Notice for Pending ₹50 Cash Advance Collection */}
+                {/* Notice for Pending Payment Confirmation */}
                 {!hasAdvance && (
                   <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 flex items-start gap-2.5 text-xs text-amber-950">
                     <Clock size={16} className="text-amber-700 shrink-0 mt-0.5" />
@@ -228,11 +228,11 @@ export default function ProfilePage() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-amber-950">BOOKING CREATED</span>
                         <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-amber-200 text-amber-900">
-                          ₹50 CASH ADVANCE PENDING
+                          PAYMENT PENDING
                         </span>
                       </div>
                       <p className="text-2xs text-amber-900">
-                        Pay ₹50 cash to the Admin to confirm your rental.
+                        Admin will verify and confirm your payment to activate the booking.
                       </p>
                     </div>
                   </div>
@@ -269,35 +269,27 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Payment Breakdown Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div className="p-3 rounded-xl bg-cm-soft/50 border border-cm-border space-y-0.5">
                     <span className="text-2xs font-bold uppercase text-cm-muted block">
-                      ₹50 Cash Advance
+                      Payment Status
                     </span>
                     <p className="font-bold text-cm-black">
-                      {hasAdvance ? "✓ Paid / Confirmed" : "⏳ Pending Cash Collection"}
+                      {hasAdvance ? "✓ Paid / Confirmed" : "⏳ Pending Confirmation"}
                     </p>
                     <p className="text-2xs text-cm-muted">
-                      {hasAdvance ? "Confirmed by Admin" : "Pay ₹50 cash to Admin"}
+                      {hasAdvance ? "Confirmed by Admin" : "Coordinated via WhatsApp / Admin"}
                     </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-cm-soft/50 border border-cm-border space-y-0.5">
                     <span className="text-2xs font-bold uppercase text-cm-muted block">
-                      Remaining Cash
+                      Total Rental Amount
                     </span>
                     <p className="font-bold text-cm-black">
-                      {hasRemaining ? "✓ Paid at Handover" : `₹${r.remainingAmount} Due at Handover`}
+                      ₹{r.rentalAmount?.toLocaleString("en-IN")}
                     </p>
-                    <p className="text-2xs text-cm-muted">Payable when receiving item</p>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-cm-soft/50 border border-cm-border space-y-0.5">
-                    <span className="text-2xs font-bold uppercase text-cm-muted block">
-                      Payment Mode
-                    </span>
-                    <p className="font-bold text-cm-black">Cash on Delivery</p>
-                    <p className="text-2xs text-cm-muted">Cash only • Zero extra fees</p>
+                    <p className="text-2xs text-cm-muted">{r.rentalDuration} days rental fee</p>
                   </div>
                 </div>
 
@@ -420,7 +412,7 @@ export default function ProfilePage() {
               </div>
 
               <p className="text-2xs text-cm-muted">
-                Note: No additional ₹50 advance is charged for extensions. Additional days are calculated at the original daily rate.
+                Note: Additional days are calculated at the original daily rate.
               </p>
 
               <button

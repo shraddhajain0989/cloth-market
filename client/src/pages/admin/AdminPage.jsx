@@ -437,20 +437,20 @@ export default function AdminPage() {
   }
 
   // Rental Lifecycle Operations
-  async function handleConfirmAdvance(id) {
+  async function handleConfirmPayment(id) {
     try {
-      await adminApi.confirmAdvance(id);
-      setMessage("✅ ₹50 advance confirmed received. Rental is CONFIRMED.");
+      await adminApi.confirmPayment(id);
+      setMessage("✅ Payment confirmed received. Rental is CONFIRMED.");
       loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
     }
   }
 
-  async function handleRecordRemaining(id) {
+  async function handleMarkProductReceived(id) {
     try {
-      await adminApi.recordRemainingPayment(id);
-      setMessage("✅ Remaining payment recorded. Rental is now ACTIVE.");
+      await adminApi.markProductReceived(id);
+      setMessage("✅ Product marked as received. Rental completed.");
       loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
@@ -728,16 +728,16 @@ export default function AdminPage() {
                       {/* Payment & Inspection Badges */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-2xs">
                         <div className="p-2 rounded-xl bg-white border border-cm-border">
-                          <span className="text-cm-muted block">₹50 Advance:</span>
+                          <span className="text-cm-muted block">Payment Status:</span>
                           <span className={`font-bold ${hasAdvance ? "text-emerald-700" : "text-amber-600"}`}>
-                            {hasAdvance ? "✓ RECEIVED" : "⏳ PENDING"}
+                            {hasAdvance ? "✓ PAYMENT RECEIVED" : "⏳ PAYMENT PENDING"}
                           </span>
                         </div>
 
                         <div className="p-2 rounded-xl bg-white border border-cm-border">
-                          <span className="text-cm-muted block">Remaining (₹{r.remainingAmount}):</span>
-                          <span className={`font-bold ${hasRemaining ? "text-emerald-700" : "text-amber-600"}`}>
-                            {hasRemaining ? "✓ RECEIVED" : "⏳ DUE AT HANDOVER"}
+                          <span className="text-cm-muted block">Full Rental Fee:</span>
+                          <span className="font-bold text-cm-black">
+                            ₹{r.rentalAmount}
                           </span>
                         </div>
 
@@ -758,13 +758,13 @@ export default function AdminPage() {
 
                       {/* Action Buttons for Lifecycle Transitions */}
                       <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-cm-border/60">
-                        {/* 1. Confirm Advance */}
+                        {/* 1. Confirm Payment Received */}
                         {!hasAdvance && (
                           <button
-                            onClick={() => handleConfirmAdvance(id)}
+                            onClick={() => handleConfirmPayment(id)}
                             className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                           >
-                            Mark ₹50 Advance Received
+                            Mark Payment Received
                           </button>
                         )}
 
@@ -792,17 +792,7 @@ export default function AdminPage() {
                           </button>
                         )}
 
-                        {/* 3. Record Remaining Cash Payment at Handover */}
-                        {hasHandover && !hasRemaining && (
-                          <button
-                            onClick={() => handleRecordRemaining(id)}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors"
-                          >
-                            Collect Remaining ₹{r.remainingAmount} & Activate
-                          </button>
-                        )}
-
-                        {/* 4. Handle Extension Requests */}
+                        {/* 3. Handle Extension Requests */}
                         {hasExtension && (
                           <div className="flex items-center gap-1.5">
                             <span className="text-2xs font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-xl">
@@ -823,8 +813,8 @@ export default function AdminPage() {
                           </div>
                         )}
 
-                        {/* 5. Return Inspection */}
-                        {hasRemaining && r.rentalStatus !== "COMPLETED" && (
+                        {/* 4. Return Inspection */}
+                        {hasAdvance && r.rentalStatus !== "COMPLETED" && (
                           <button
                             onClick={() => {
                               setInspectionData({
@@ -847,7 +837,7 @@ export default function AdminPage() {
                           </button>
                         )}
 
-                        {/* 6. Report Damage */}
+                        {/* 5. Report Damage */}
                         {r.rentalStatus !== "COMPLETED" && !hasDamage && (
                           <button
                             onClick={() => {
@@ -865,7 +855,7 @@ export default function AdminPage() {
                           </button>
                         )}
 
-                        {/* 7. Resolve Damage */}
+                        {/* 6. Resolve Damage */}
                         {hasDamage && r.damageReport?.status !== "DAMAGE_RESOLVED" && (
                           <button
                             onClick={() => handleResolveDamage(id)}
@@ -875,13 +865,14 @@ export default function AdminPage() {
                           </button>
                         )}
 
-                        {/* 8. Mark Completed */}
-                        {r.rentalStatus !== "COMPLETED" && !hasDamage && (
+                        {/* 7. Mark Product Received */}
+                        {hasAdvance && r.rentalStatus !== "COMPLETED" && !hasDamage && (
                           <button
-                            onClick={() => handleComplete(id)}
-                            className="px-3 py-1.5 rounded-xl border border-cm-border text-cm-black hover:bg-cm-soft text-xs font-bold transition-colors"
+                            onClick={() => handleMarkProductReceived(id)}
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
                           >
-                            Mark Completed
+                            <PackageCheck size={14} />
+                            <span>Mark Product Received</span>
                           </button>
                         )}
                       </div>
@@ -1358,7 +1349,7 @@ export default function AdminPage() {
               <div>
                 <h3 className="text-xl font-display font-bold text-cm-black">Payment Verifications</h3>
                 <p className="text-xs text-cm-muted">
-                  Review customer UPI payments, verify transaction receipts, and approve booking advances
+                  Review customer UPI payments, verify transaction receipts, and approve rental payments
                 </p>
               </div>
 
@@ -1583,26 +1574,13 @@ export default function AdminPage() {
                         <div className="p-3.5 rounded-2xl bg-cm-soft/50 border border-cm-border space-y-1">
                           <p className="text-[10px] uppercase tracking-wider font-bold text-cm-muted">Payment Calculation</p>
                           <div className="flex justify-between items-center text-xs">
-                            <span className="text-cm-muted">Total Amount:</span>
+                            <span className="text-cm-muted">{isRent ? "Rental Fee:" : "Purchase Total:"}</span>
                             <span className="font-bold text-cm-black">₹{p.totalAmount}</span>
                           </div>
-                          {isRent ? (
-                            <>
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="font-bold text-amber-700">₹50 Advance (Booking):</span>
-                                <span className="font-bold text-amber-700">₹{p.advanceAmount || 50}</span>
-                              </div>
-                              <div className="flex justify-between items-center text-xs">
-                                <span className="text-cm-muted">Remaining at Handover:</span>
-                                <span className="font-semibold text-cm-black">₹{p.remainingAmount}</span>
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="font-bold text-blue-700">Expected Total:</span>
-                              <span className="font-bold text-blue-700">₹{p.expectedAmount}</span>
-                            </div>
-                          )}
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-emerald-700">Expected Total:</span>
+                            <span className="font-bold text-emerald-700">₹{p.totalAmount || p.expectedAmount}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -1645,7 +1623,7 @@ export default function AdminPage() {
                               onClick={() => {
                                 const phone = (p.customer?.phone || "").replace(/[^0-9]/g, "");
                                 const msg = isRent
-                                  ? `Hello ${p.customer?.name || ""}! Regarding your rental request for *${p.product?.name}* (Ref: ${p.customerReference}):\nPlease pay the ₹50 booking advance to confirm your rental dates (${p.rentalStartDate} to ${p.rentalEndDate}).\n\nOfficial UPI ID: ${businessConfig.upiId || "N/A"}\nPayment QR: ${businessConfig.paymentQrUrl || "Available on request"}\n\nRemaining ₹${p.remainingAmount} is payable in cash at handover!`
+                                  ? `Hello ${p.customer?.name || ""}! Regarding your rental request for *${p.product?.name}* (Ref: ${p.customerReference}):\nPlease complete payment of ₹${p.totalAmount} to confirm your rental dates (${p.rentalStartDate} to ${p.rentalEndDate}).\n\nOfficial UPI ID: ${businessConfig.upiId || "N/A"}\nPayment QR: ${businessConfig.paymentQrUrl || "Available on request"}`
                                   : `Hello ${p.customer?.name || ""}! Regarding your purchase request for *${p.product?.name}* (Ref: ${p.customerReference}):\nPlease pay the total amount ₹${p.totalAmount} to complete your order.\n\nOfficial UPI ID: ${businessConfig.upiId || "N/A"}\nPayment QR: ${businessConfig.paymentQrUrl || "Available on request"}`;
                                 const url = phone
                                   ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
@@ -1757,7 +1735,7 @@ export default function AdminPage() {
                 Official Payment QR Code
               </label>
               <p className="text-2xs text-cm-muted">
-                Upload your official UPI QR code (Google Pay, PhonePe, Paytm, or bank UPI). Customers can scan this to pay the ₹50 booking advance or buy resale items.
+                Upload your official UPI QR code (Google Pay, PhonePe, Paytm, or bank UPI). Customers can scan this to pay for rentals or buy resale items.
               </p>
 
               {businessConfig.paymentQrUrl ? (
@@ -1839,7 +1817,7 @@ export default function AdminPage() {
               </label>
               <textarea
                 rows={3}
-                placeholder="Step 1: Scan the QR code to pay ₹50 booking advance. Step 2: Share transaction screenshot on WhatsApp..."
+                placeholder="Step 1: Scan the QR code to complete rental payment. Step 2: Share transaction screenshot on WhatsApp..."
                 value={businessConfig.paymentInstructions}
                 onChange={(e) => setBusinessConfig((c) => ({ ...c, paymentInstructions: e.target.value }))}
                 className="w-full px-3.5 py-2.5 text-xs rounded-2xl border border-cm-border focus:border-cm-black"
@@ -1889,12 +1867,12 @@ export default function AdminPage() {
                   <strong>Cloth:</strong> {verifyModal.payment.product?.name} (Size: {verifyModal.payment.size})
                 </p>
                 <p>
-                  <strong>Transaction:</strong> {verifyModal.payment.transactionType === "RENT" ? "Rental Booking Advance" : "Resale Purchase"}
+                  <strong>Transaction:</strong> {verifyModal.payment.transactionType === "RENT" ? "Rental Booking" : "Resale Purchase"}
                 </p>
                 <div className="pt-1 border-t border-cm-border flex justify-between items-center text-sm font-bold">
                   <span>Amount to Verify:</span>
                   <span className="text-emerald-700 text-base">
-                    ₹{verifyModal.payment.expectedAmount || (verifyModal.payment.transactionType === "RENT" ? 50 : verifyModal.payment.totalAmount)}
+                    ₹{verifyModal.payment.totalAmount || verifyModal.payment.expectedAmount}
                   </span>
                 </div>
               </div>

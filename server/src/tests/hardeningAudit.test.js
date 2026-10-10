@@ -856,7 +856,7 @@ describe("PRODUCTION HARDENING & RESERVATION LIFECYCLE AUDIT TEST SUITE", () => 
   });
 
   describe("6. Server-Authoritative Payment Pricing & Input Validation (Fix 1)", () => {
-    test("RENT payment ignores client-supplied pricing and calculates DB dailyRate * duration with ₹50 advance", async () => {
+    test("RENT payment ignores client-supplied pricing and calculates DB dailyRate * duration without advance", async () => {
       const prod = await Product.create({
         name: "Authoritative Rent Sherwani",
         category: "Ethnic",
@@ -892,9 +892,9 @@ describe("PRODUCTION HARDENING & RESERVATION LIFECYCLE AUDIT TEST SUITE", () => 
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.data.totalAmount, 3000); // 750 * 4
-      assert.strictEqual(data.data.advanceAmount, 50); // ₹50 advance
-      assert.strictEqual(data.data.remainingAmount, 2950); // 3000 - 50
-      assert.strictEqual(data.data.expectedAmount, 50); // ₹50 advance upfront
+      assert.strictEqual(data.data.advanceAmount, 0); // ₹0 advance
+      assert.strictEqual(data.data.remainingAmount, 0); // 0 remaining
+      assert.strictEqual(data.data.expectedAmount, 3000); // Full payment expected
       assert.strictEqual(data.data.rentalDuration, 4);
     });
 
@@ -1728,6 +1728,287 @@ describe("PRODUCTION HARDENING & RESERVATION LIFECYCLE AUDIT TEST SUITE", () => 
       } finally {
         Product.updateOne = originalUpdateOne;
       }
+    });
+  });
+
+  describe("10. Rental Payment Confirmation, Product Return & Role Authorization", () => {
+    test("Admin marks payment received: confirms rental, reserves slot, syncs Payment", async () => {
+      const prod = await Product.create({
+        name: "Payment Received Test Sherwani",
+        category: "Ethnic",
+        rentPrice: 800,
+        price: 5000,
+        available: true,
+        sizeVariants: [{ size: "XL", stock: 2, available: true }],
+        images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"]
+      });
+
+      const rental = await Rental.create({
+        userId: customerUser.id,
+        clothId: prod.id,
+        size: "XL",
+        rentalStartDate: "2027-06-01",
+        originalEndDate: "2027-06-04",
+        currentEndDate: "2027-06-04",
+        rentalDuration: 3,
+        rentalAmount: 2400,
+        advanceAmount: 0,
+        remainingAmount: 0,
+        advanceStatus: "ADVANCE_PENDING",
+        rentalStatus: "PENDING_ADVANCE"
+      });
+
+      const payment = await Payment.create({
+        customerReference: "REF-TEST-PAY-001",
+        productId: prod.id,
+        productName: prod.name,
+        rentalId: rental.id,
+        userId: customerUser.id,
+        transactionType: "RENT",
+        totalAmount: 2400,
+        expectedAmount: 2400,
+        advanceAmount: 0,
+        remainingAmount: 0,
+        rentalDuration: 3,
+        rentalStartDate: "2027-06-01",
+        rentalEndDate: "2027-06-04",
+        size: "XL",
+        status: "Awaiting Payment"
+      });
+
+      const res = await fetch(`${baseUrl}/admin/rentals/${rental.id}/payment-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.data.rentalStatus, "CONFIRMED");
+      assert.strictEqual(json.data.advanceStatus, "ADVANCE_RECEIVED");
+      assert.strictEqual(json.data.rentalAmount, 2400);
+
+      // Verify inventory reservation was created
+      const freshProd = await Product.findById(prod.id);
+      const slot = (freshProd.activeRentals || []).find((r) => r.rentalId.toString() === rental.id.toString());
+      assert.ok(slot, "Active rental slot must be reserved on payment confirmation");
+
+      // Verify linked payment is marked Verified
+      const freshPayment = await Payment.findById(payment.id);
+      assert.strictEqual(freshPayment.status, "Verified");
+    });
+
+    test("Duplicate payment confirmation is rejected with 400", async () => {
+      const prod = await Product.create({
+        name: "Dup Payment Test Lehenga",
+        category: "Ethnic",
+        rentPrice: 600,
+        price: 4000,
+        available: true,
+        sizeVariants: [{ size: "M", stock: 1, available: true }],
+        images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"]
+      });
+
+      const rental = await Rental.create({
+        userId: customerUser.id,
+        clothId: prod.id,
+        size: "M",
+        rentalStartDate: "2027-06-10",
+        originalEndDate: "2027-06-13",
+        currentEndDate: "2027-06-13",
+        rentalDuration: 3,
+        rentalAmount: 1800,
+        advanceAmount: 0,
+        remainingAmount: 0,
+        advanceStatus: "ADVANCE_RECEIVED",
+        rentalStatus: "CONFIRMED"
+      });
+
+      const res = await fetch(`${baseUrl}/admin/rentals/${rental.id}/payment-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      assert.strictEqual(res.status, 400);
+      const json = await res.json();
+      assert.match(json.message, /already (marked|been recorded) as received/i);
+    });
+
+    test("Payment confirmation on CANCELLED or COMPLETED rental is rejected with 400", async () => {
+      const prod = await Product.create({
+        name: "Cancelled Rental Pay Test",
+        category: "Ethnic",
+        rentPrice: 500,
+        price: 3000,
+        available: true,
+        sizeVariants: [{ size: "S", stock: 1, available: true }],
+        images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"]
+      });
+
+      const rental = await Rental.create({
+        userId: customerUser.id,
+        clothId: prod.id,
+        size: "S",
+        rentalStartDate: "2027-07-01",
+        originalEndDate: "2027-07-03",
+        currentEndDate: "2027-07-03",
+        rentalDuration: 2,
+        rentalAmount: 1000,
+        rentalStatus: "CANCELLED",
+        advanceStatus: "ADVANCE_PENDING"
+      });
+
+      const res = await fetch(`${baseUrl}/admin/rentals/${rental.id}/payment-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      assert.strictEqual(res.status, 400);
+      const json = await res.json();
+      assert.match(json.message, /cannot confirm payment for a (cancelled|completed) rental/i);
+    });
+
+    test("Mark product received: sets COMPLETED, productReceived: true, releases inventory slot", async () => {
+      const prod = await Product.create({
+        name: "Return Item Test Tuxedo",
+        category: "Suits",
+        rentPrice: 900,
+        price: 6000,
+        available: true,
+        sizeVariants: [{ size: "L", stock: 1, available: true }],
+        images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"]
+      });
+
+      const rental = await Rental.create({
+        userId: customerUser.id,
+        clothId: prod.id,
+        size: "L",
+        rentalStartDate: "2027-08-01",
+        originalEndDate: "2027-08-04",
+        currentEndDate: "2027-08-04",
+        rentalDuration: 3,
+        rentalAmount: 2700,
+        advanceAmount: 0,
+        remainingAmount: 0,
+        advanceStatus: "ADVANCE_RECEIVED",
+        rentalStatus: "ACTIVE_RENTAL"
+      });
+
+      await reserveRentalSlot(rental);
+
+      // Verify slot exists before product return
+      let freshProd = await Product.findById(prod.id);
+      assert.strictEqual((freshProd.activeRentals || []).length, 1);
+
+      const res = await fetch(`${baseUrl}/admin/rentals/${rental.id}/product-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      assert.strictEqual(res.status, 200);
+      const json = await res.json();
+      assert.strictEqual(json.data.rentalStatus, "COMPLETED");
+      assert.strictEqual(json.data.productReceived, true);
+      assert.ok(json.data.productReceivedAt);
+
+      // Verify inventory slot was released
+      freshProd = await Product.findById(prod.id);
+      const slot = (freshProd.activeRentals || []).find((r) => r.rentalId.toString() === rental.id.toString());
+      assert.strictEqual(slot, undefined, "Slot must be released after product return");
+    });
+
+    test("Mark product received is rejected for unpaid rental (PENDING_ADVANCE)", async () => {
+      const prod = await Product.create({
+        name: "Unpaid Return Test Kurta",
+        category: "Ethnic",
+        rentPrice: 400,
+        price: 2000,
+        available: true,
+        sizeVariants: [{ size: "M", stock: 2, available: true }],
+        images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"]
+      });
+
+      const rental = await Rental.create({
+        userId: customerUser.id,
+        clothId: prod.id,
+        size: "M",
+        rentalStartDate: "2027-08-10",
+        originalEndDate: "2027-08-12",
+        currentEndDate: "2027-08-12",
+        rentalDuration: 2,
+        rentalAmount: 800,
+        advanceAmount: 0,
+        remainingAmount: 0,
+        advanceStatus: "ADVANCE_PENDING",
+        rentalStatus: "PENDING_ADVANCE"
+      });
+
+      const res = await fetch(`${baseUrl}/admin/rentals/${rental.id}/product-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${adminToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+
+      assert.strictEqual(res.status, 400);
+      const json = await res.json();
+      assert.match(json.message, /payment must be confirmed/i);
+    });
+
+    test("Customer is rejected with 403 when trying to mark payment or product received", async () => {
+      const prod = await Product.create({
+        name: "RBAC Security Test Sherwani",
+        category: "Ethnic",
+        rentPrice: 500,
+        price: 2500,
+        available: true,
+        sizeVariants: [{ size: "S", stock: 1, available: true }],
+        images: ["https://res.cloudinary.com/demo/image/upload/sample.jpg"]
+      });
+
+      const rental = await Rental.create({
+        userId: customerUser.id,
+        clothId: prod.id,
+        size: "S",
+        rentalStartDate: "2027-09-01",
+        originalEndDate: "2027-09-03",
+        currentEndDate: "2027-09-03",
+        rentalDuration: 2,
+        rentalAmount: 1000,
+        rentalStatus: "PENDING_ADVANCE"
+      });
+
+      // Customer tries to mark payment received
+      const payRes = await fetch(`${baseUrl}/admin/rentals/${rental.id}/payment-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      assert.strictEqual(payRes.status, 403);
+
+      // Customer tries to mark product received
+      const prodRes = await fetch(`${baseUrl}/admin/rentals/${rental.id}/product-received`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${customerToken}`,
+          "Content-Type": "application/json"
+        }
+      });
+      assert.strictEqual(prodRes.status, 403);
     });
   });
 });

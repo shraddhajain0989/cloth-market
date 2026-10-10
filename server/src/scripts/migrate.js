@@ -251,12 +251,12 @@ export async function runMigration(options = {}) {
     }
 
     // D. Advance amount (₹50) and remaining amount
-    if (rental.advanceAmount === undefined || rental.advanceAmount === null) {
+    if (!rental.advanceAmount || rental.advanceAmount === 0) {
       rental.advanceAmount = Math.min(50, rental.rentalAmount);
       modified = true;
     }
 
-    if (rental.remainingAmount === undefined || rental.remainingAmount === null) {
+    if (!rental.remainingAmount || rental.remainingAmount === 0) {
       rental.remainingAmount = Math.max(0, rental.rentalAmount - rental.advanceAmount);
       modified = true;
     }

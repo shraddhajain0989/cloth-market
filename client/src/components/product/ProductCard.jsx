@@ -119,7 +119,7 @@ export default function ProductCard({ product, onRent, onBuy, onSelect }) {
                 disabled={!isAvailable}
                 className="w-full py-2 px-1 rounded-xl bg-cm-black text-white text-3xs font-bold uppercase tracking-wider hover:bg-cm-red disabled:opacity-50 transition-colors text-center"
               >
-                Rent Outfit
+                Rent Now
               </button>
               <button
                 type="button"
@@ -155,7 +155,7 @@ export default function ProductCard({ product, onRent, onBuy, onSelect }) {
               disabled={!isAvailable}
               className="w-full py-2.5 px-3 rounded-xl bg-cm-black text-white text-xs font-bold uppercase tracking-wider hover:bg-cm-red disabled:opacity-50 disabled:pointer-events-none transition-colors"
             >
-              Rent This Outfit
+              Rent Now
             </button>
           )}
         </div>

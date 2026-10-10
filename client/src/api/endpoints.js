@@ -51,14 +51,16 @@ export const rentalApi = {
 export const adminApi = {
   dashboard: () => api.get("/admin/dashboard"),
   rentals: (params) => api.get("/admin/rentals", { params }),
-  confirmAdvance: (id) => api.patch(`/admin/rentals/${id}/advance`),
+  confirmPayment: (id) => api.patch(`/admin/rentals/${id}/payment-received`),
+  confirmAdvance: (id) => api.patch(`/admin/rentals/${id}/payment-received`),
   handoverInspection: (id, payload) => api.post(`/admin/rentals/${id}/handover-inspection`, payload),
   recordRemainingPayment: (id) => api.patch(`/admin/rentals/${id}/remaining-payment`),
   reviewExtension: (id, payload) => api.patch(`/admin/rentals/${id}/extension`, payload),
   returnInspection: (id, payload) => api.post(`/admin/rentals/${id}/return-inspection`, payload),
   reportDamage: (id, payload) => api.post(`/admin/rentals/${id}/damage`, payload),
   resolveDamage: (id) => api.patch(`/admin/rentals/${id}/damage/resolve`),
-  completeRental: (id) => api.patch(`/admin/rentals/${id}/complete`),
+  markProductReceived: (id) => api.patch(`/admin/rentals/${id}/product-received`),
+  completeRental: (id) => api.patch(`/admin/rentals/${id}/product-received`),
   bulkRemoveProducts: (productIds) => api.delete("/admin/products/bulk", { data: { productIds } })
 };
 

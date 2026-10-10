@@ -258,11 +258,11 @@ describe("5. RENTAL BOOKING, ₹50 ADVANCE & SIZE-AWARE INVENTORY", () => {
     assert.strictEqual(rental.size, "S");
     assert.strictEqual(rental.rentalDuration, 3);
     assert.strictEqual(rental.rentalAmount, 1200); // 3 * 400
-    assert.strictEqual(rental.advanceAmount, 50);  // ₹50 advance
-    assert.strictEqual(rental.remainingAmount, 1150); // 1200 - 50 = 1150
+    assert.strictEqual(rental.advanceAmount, 0);  // ₹0 advance
+    assert.strictEqual(rental.remainingAmount, 0); // ₹0 remaining
     assert.strictEqual(rental.advanceStatus, "ADVANCE_PENDING");
     assert.strictEqual(rental.rentalStatus, "PENDING_ADVANCE");
-    assert.strictEqual(rental.paymentMethod, "CASH");
+    assert.strictEqual(rental.paymentMethod, "MANUAL_WHATSAPP");
   });
 
   test("Prevent overlapping rental for size S when stock is 1", async () => {
@@ -414,7 +414,7 @@ describe("7. RENTAL LIFECYCLE & EXTENSION WORKFLOW", () => {
     const json = await appRes.json();
     assert.strictEqual(appRes.status, 200);
     assert.strictEqual(json.data.rentalStatus, "EXTENDED");
-    assert.strictEqual(json.data.advanceAmount, 50); // Advance remains ₹50!
+    assert.strictEqual(json.data.advanceAmount, 0); // Advance remains 0
     assert.strictEqual(json.data.extensionAmount, 600); // 2 additional days * 300
   });
 

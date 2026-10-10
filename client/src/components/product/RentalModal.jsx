@@ -73,8 +73,6 @@ export default function RentalModal({ product, open, onClose, onSubmit, loading 
 
   const dailyRate = product.rentPrice || product.price || 0;
   const totalRentalAmount = durationDays * dailyRate;
-  const advanceAmount = 50; // INCLUDED in total rental amount
-  const remainingAtHandover = Math.max(0, totalRentalAmount - advanceAmount);
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -211,25 +209,17 @@ export default function RentalModal({ product, open, onClose, onSubmit, loading 
               <span>{durationDays} days × ₹{dailyRate.toLocaleString("en-IN")}</span>
               <span className="font-semibold text-cm-black">₹{totalRentalAmount.toLocaleString("en-IN")}</span>
             </div>
-            <div className="flex justify-between text-cm-muted">
-              <span>₹50 cash advance</span>
-              <span className="font-semibold text-emerald-700">₹{advanceAmount}</span>
-            </div>
-            <div className="flex justify-between text-cm-muted">
-              <span>Remaining at handover</span>
-              <span className="font-semibold text-cm-black">₹{remainingAtHandover.toLocaleString("en-IN")}</span>
-            </div>
             <div className="pt-2 border-t border-cm-border flex justify-between items-baseline font-bold">
               <span className="text-xs uppercase text-cm-muted">Total Rental</span>
               <span className="text-base text-cm-black">₹{totalRentalAmount.toLocaleString("en-IN")}</span>
             </div>
           </div>
 
-          {/* Cash Notice */}
-          <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-950 text-2xs space-y-1">
-            <p className="font-bold">Payment: CASH ONLY</p>
-            <p>• <strong>₹50 cash advance</strong> is required to confirm the rental.</p>
-            <p>• Remaining amount is paid in cash at handover.</p>
+          {/* Payment Notice */}
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-2xs space-y-1">
+            <p className="font-bold">Payment: Coordinated via WhatsApp</p>
+            <p>• The administrator will verify availability and share payment instructions.</p>
+            <p>• Payment must be confirmed by Admin to secure your reservation.</p>
           </div>
 
           {/* Submit CTA */}
@@ -241,7 +231,7 @@ export default function RentalModal({ product, open, onClose, onSubmit, loading 
             {loading ? "Processing..." : "Book Rental"}
           </button>
           <p className="text-center text-2xs text-cm-muted">
-            Pay ₹50 cash to the Admin to confirm your rental.
+            Confirm your payment with the Admin to finalize your booking.
           </p>
         </form>
       </div>

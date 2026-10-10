@@ -160,7 +160,7 @@ export default function MasterAdminPage() {
         </article>
 
         <article className="rounded-3xl bg-neutral-900 text-white p-5 border border-neutral-800 shadow-md">
-          <p className="text-2xs uppercase tracking-widest font-bold text-neutral-400">Advances Collected</p>
+          <p className="text-2xs uppercase tracking-widest font-bold text-neutral-400">Payments Collected</p>
           <h3 className="mt-1 text-2xl font-display font-bold text-emerald-400">
             ₹{(analytics?.advanceCollected ?? 0).toLocaleString("en-IN")}
           </h3>

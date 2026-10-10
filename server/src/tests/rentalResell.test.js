@@ -368,10 +368,10 @@ describe("RENTAL & RESALE FEATURE IMPLEMENTATION TESTS", () => {
       const data = await res.json();
       assert.strictEqual(data.data.status, "Awaiting Payment");
       assert.strictEqual(data.data.transactionType, "RENT");
-      assert.strictEqual(data.data.advanceAmount, 50); // ₹50 booking advance
+      assert.strictEqual(data.data.advanceAmount, 0); // ₹0 booking advance
       assert.strictEqual(data.data.totalAmount, 1800); // 3 days * 600
-      assert.strictEqual(data.data.remainingAmount, 1750); // 1800 - 50
-      assert.strictEqual(data.data.expectedAmount, 50); // Expecting ₹50 advance upfront
+      assert.strictEqual(data.data.remainingAmount, 0); // 0 remaining
+      assert.strictEqual(data.data.expectedAmount, 1800); // Expecting full payment upfront
       rentalPaymentId = data.data._id || data.data.id;
     });
 

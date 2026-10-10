@@ -7,7 +7,7 @@ const RENTAL_STEPS = [
     step: "01",
     icon: Calendar,
     title: "Pick Dates & Rent",
-    desc: "Choose your dates. Pay only ₹50 advance to confirm, with remaining amount payable upon handover."
+    desc: "Choose your dates and confirm booking directly with the Admin via WhatsApp."
   },
   {
     step: "02",

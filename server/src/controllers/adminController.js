@@ -1,6 +1,7 @@
 import { Order } from "../models/Order.js";
 import { Product } from "../models/Product.js";
 import { Rental } from "../models/Rental.js";
+import { Payment } from "../models/Payment.js";
 import { User } from "../models/User.js";
 import { logAction } from "../models/AuditLog.js";
 import { reserveRentalSlot, releaseRentalSlot, extendRentalSlot } from "../utils/rentalReservation.js";
@@ -83,19 +84,22 @@ export async function listAdminRentals(req, res) {
 }
 
 /**
- * Admin records ₹50 advance received (Cash):
- * Status transitions from PENDING_ADVANCE to CONFIRMED.
+ * Admin / Master Admin records payment received (manual WhatsApp payment verified):
+ * Status transitions to CONFIRMED and inventory slot is atomically reserved.
  */
-export async function confirmAdvance(req, res) {
+export async function confirmPaymentReceived(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
-  if (rental.advanceStatus === "ADVANCE_RECEIVED") {
-    return fail(res, 400, "Advance payment has already been recorded as received.");
+  if (rental.advanceStatus === "ADVANCE_RECEIVED" || rental.rentalStatus === "CONFIRMED") {
+    return fail(res, 400, "Payment has already been recorded as received.");
   }
 
   if (rental.rentalStatus === "CANCELLED") {
-    return fail(res, 400, "Cannot confirm advance for a cancelled rental.");
+    return fail(res, 400, "Cannot confirm payment for a cancelled rental.");
+  }
+  if (rental.rentalStatus === "COMPLETED") {
+    return fail(res, 400, "Cannot confirm payment for an already completed rental.");
   }
 
   try {
@@ -106,30 +110,52 @@ export async function confirmAdvance(req, res) {
 
   // Atomically update rental status
   const updatedRental = await Rental.findOneAndUpdate(
-    { _id: rental._id, advanceStatus: "ADVANCE_PENDING" },
-    { $set: { advanceStatus: "ADVANCE_RECEIVED", rentalStatus: "CONFIRMED" } },
+    { _id: rental._id, advanceStatus: { $ne: "ADVANCE_RECEIVED" }, rentalStatus: { $nin: ["CANCELLED", "COMPLETED"] } },
+    {
+      $set: {
+        advanceStatus: "ADVANCE_RECEIVED",
+        rentalStatus: "CONFIRMED",
+        remainingAmount: 0,
+        remainingPaymentStatus: "REMAINING_RECEIVED"
+      }
+    },
     { new: true }
   );
 
   if (!updatedRental) {
     const recheck = await Rental.findById(rental._id);
     if (recheck?.advanceStatus === "ADVANCE_RECEIVED") {
-      return fail(res, 400, "Advance payment has already been recorded as received.");
+      return fail(res, 400, "Payment has already been recorded as received.");
     }
     await releaseRentalSlot(rental.clothId, rental._id);
     return fail(res, 400, "Rental status could not be updated.");
   }
 
+  // Also update linked Payment if exists
+  await Payment.updateMany(
+    { rentalId: String(updatedRental._id), status: { $nin: ["Verified", "Cancelled", "Rejected"] } },
+    {
+      $set: {
+        status: "Verified",
+        verifiedBy: req.user?.name || req.user?.email || "Admin",
+        verifiedAt: new Date()
+      }
+    }
+  );
+
   await logAction({
     actorId: req.user.id,
     actorRole: req.user.role,
-    action: "admin_confirmed_advance",
+    action: "admin_confirmed_payment",
     targetId: updatedRental.id,
-    metadata: { advanceAmount: updatedRental.advanceAmount }
+    metadata: { rentalAmount: updatedRental.rentalAmount }
   });
 
-  return ok(res, updatedRental, "Advance recorded as received. Rental confirmed.");
+  return ok(res, updatedRental, "Payment recorded as received. Rental confirmed.");
 }
+
+// Backward-compatible alias
+export const confirmAdvance = confirmPaymentReceived;
 
 /**
  * Admin records Handover Inspection and baseline photos.
@@ -181,12 +207,12 @@ export async function recordRemainingPayment(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
-  if (rental.remainingPaymentStatus === "REMAINING_RECEIVED") {
+  if (rental.remainingPaymentStatus === "REMAINING_RECEIVED" && rental.rentalStatus === "ACTIVE_RENTAL") {
     return fail(res, 400, "Remaining payment has already been recorded as received.");
   }
 
   if (rental.advanceStatus !== "ADVANCE_RECEIVED") {
-    return fail(res, 400, "Cannot collect remaining payment before the ₹50 confirmation advance is received.");
+    return fail(res, 400, "Cannot collect remaining payment before payment confirmation is recorded.");
   }
 
   if (!rental.handoverInspection?.inspectedAt) {
@@ -370,27 +396,92 @@ export async function resolveDamage(req, res) {
 }
 
 /**
- * Admin marks rental as COMPLETED.
+ * Admin / Master Admin marks product received when the dress is returned to the business.
+ * - Enforces that payment has been received (cannot mark product received on unpaid rentals)
+ * - Prevents bypassing required payment or rental-state validation
+ * - Validates allowed source rental status
+ * - Sets productReceived: true, productReceivedAt: new Date(), rentalStatus: "COMPLETED"
+ * - Releases reserved inventory slot
  */
-export async function completeRental(req, res) {
+export async function markProductReceived(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
-  rental.rentalStatus = "COMPLETED";
-  await rental.save();
+  if (rental.rentalStatus === "PENDING_ADVANCE" || rental.advanceStatus !== "ADVANCE_RECEIVED") {
+    return fail(
+      res,
+      400,
+      "Cannot mark product received for an unpaid rental. Payment must be confirmed first."
+    );
+  }
+
+  if (rental.rentalStatus === "CANCELLED") {
+    return fail(res, 400, "Cannot mark product received for a cancelled rental.");
+  }
+
+  if (rental.rentalStatus === "COMPLETED") {
+    return fail(res, 400, "Product has already been marked as received and rental is completed.");
+  }
+
+  const VALID_RETURN_STATUSES = [
+    "CONFIRMED",
+    "READY_FOR_HANDOVER",
+    "HANDOVER_INSPECTION",
+    "ACTIVE_RENTAL",
+    "EXTENSION_REQUESTED",
+    "EXTENDED",
+    "RETURN_INSPECTION",
+    "DAMAGE_REPORTED",
+    "DAMAGE_SETTLEMENT"
+  ];
+
+  if (!VALID_RETURN_STATUSES.includes(rental.rentalStatus)) {
+    return fail(
+      res,
+      400,
+      `Cannot mark product received for rental in '${rental.rentalStatus}' state.`
+    );
+  }
+
+  const updatedRental = await Rental.findOneAndUpdate(
+    { _id: rental._id, rentalStatus: { $in: VALID_RETURN_STATUSES } },
+    {
+      $set: {
+        rentalStatus: "COMPLETED",
+        status: "COMPLETED",
+        productReceived: true,
+        productReceivedAt: new Date()
+      }
+    },
+    { new: true }
+  );
+
+  if (!updatedRental) {
+    const recheck = await Rental.findById(rental._id);
+    if (recheck?.rentalStatus === "COMPLETED") {
+      return fail(res, 400, "Product has already been marked as received and rental is completed.");
+    }
+    return fail(res, 400, "Rental status could not be updated.");
+  }
 
   // Release reservation slot
-  await releaseRentalSlot(rental.clothId, rental._id);
+  const clothId = updatedRental.clothId || updatedRental.productId;
+  if (clothId) {
+    await releaseRentalSlot(clothId, updatedRental._id);
+  }
 
   await logAction({
     actorId: req.user.id,
     actorRole: req.user.role,
-    action: "admin_completed_rental",
-    targetId: rental.id
+    action: "admin_marked_product_received",
+    targetId: updatedRental.id
   });
 
-  return ok(res, rental, "Rental marked as COMPLETED.");
+  return ok(res, updatedRental, "Product marked as received. Rental completed and inventory released.");
 }
+
+// Backward-compatible alias
+export const completeRental = markProductReceived;
 
 /**
  * Admin cancels rental and releases reserved inventory.
