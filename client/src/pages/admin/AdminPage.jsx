@@ -22,7 +22,8 @@ import {
   Copy,
   ExternalLink,
   Images,
-  ShieldAlert
+  ShieldAlert,
+  PackageCheck
 } from "lucide-react";
 import { adminApi, productApi, paymentApi, configApi, uploadApi } from "../../api/endpoints";
 import ImageUpload from "../../components/admin/ImageUpload";
