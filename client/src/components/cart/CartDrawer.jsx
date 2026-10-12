@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, ShoppingBag, Trash2, ArrowRight, ShieldCheck, Tag, Plus, Minus, MessageCircle, Calendar } from "lucide-react";
+import { X, ShoppingBag, Trash2, ArrowRight, ShieldCheck, Tag, Plus, Minus, MessageCircle, Calendar, Loader2 } from "lucide-react";
 import { orderApi, configApi } from "../../api/endpoints";
 import { useAuthStore } from "../../store/authStore";
 
@@ -8,6 +8,7 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
   const user = useAuthStore((state) => state.user);
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingWaKey, setLoadingWaKey] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState("");
@@ -39,6 +40,8 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
     const rawPhone = businessConfig?.whatsappNumber || "";
     const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
     if (!cleanPhone) return;
+    const itemKey = item.productId + (item.size || "");
+    setLoadingWaKey(itemKey);
     const msg = `Hello Cloth Market! Checking on my rental outfit in my cart:
 
 *Outfit:* ${item.name}
@@ -49,6 +52,9 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
 Please confirm reservation and payment instructions.`;
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
     window.open(url, "_blank", "noopener,noreferrer");
+    setTimeout(() => {
+      setLoadingWaKey("");
+    }, 1200);
   }
 
   useEffect(() => {
@@ -269,10 +275,20 @@ Please confirm reservation and payment instructions.`;
                               <button
                                 type="button"
                                 onClick={() => handleOpenWhatsApp(item)}
-                                className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-3xs font-bold transition-colors"
+                                disabled={Boolean(loadingWaKey)}
+                                className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-3xs font-bold transition-colors"
                               >
-                                <MessageCircle size={11} />
-                                <span>Confirm on WhatsApp</span>
+                                {loadingWaKey === (item.productId + (item.size || "")) ? (
+                                  <>
+                                    <Loader2 size={11} className="animate-spin" />
+                                    <span>Opening WhatsApp...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <MessageCircle size={11} />
+                                    <span>Confirm on WhatsApp</span>
+                                  </>
+                                )}
                               </button>
                             ) : (
                               <div className="flex items-center gap-2 pt-1">
@@ -392,10 +408,13 @@ Please confirm reservation and payment instructions.`;
                 <button
                   disabled={submitting}
                   onClick={handlePlaceOrder}
-                  className="btn btn-red w-full py-3.5 text-sm font-semibold flex items-center justify-center gap-2 group shadow-xl"
+                  className="btn btn-red w-full py-3.5 text-sm font-semibold flex items-center justify-center gap-2 group shadow-xl disabled:opacity-50"
                 >
                   {submitting ? (
-                    <span>Placing Order...</span>
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Placing Order...</span>
+                    </>
                   ) : (
                     <>
                       <span>Place Order • ₹{grandTotal.toLocaleString("en-IN")}</span>

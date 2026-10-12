@@ -11,7 +11,8 @@ import {
   ShieldCheck,
   Sparkles,
   Tag,
-  ShoppingBag
+  ShoppingBag,
+  Loader2
 } from "lucide-react";
 import { configApi, paymentApi, rentalApi, orderApi } from "../../api/endpoints";
 import { useAuthStore } from "../../store/authStore";
@@ -624,16 +625,25 @@ Please confirm availability and share the payment QR code and payment instructio
                 }
                 className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition-all disabled:opacity-50"
               >
-                <MessageCircle size={16} />
-                <span>
-                  {product.available === false
-                    ? "Currently Unavailable"
-                    : mode === "rent"
-                    ? "Rent Now (Add to Cart & WhatsApp)"
-                    : availableStock <= 0
-                    ? "Out of Stock"
-                    : "Buy Now (Add to Cart & WhatsApp)"}
-                </span>
+                {submitting ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Adding to Bag & Opening WhatsApp...</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageCircle size={16} />
+                    <span>
+                      {product.available === false
+                        ? "Currently Unavailable"
+                        : mode === "rent"
+                        ? "Rent Now (Add to Cart & WhatsApp)"
+                        : availableStock <= 0
+                        ? "Out of Stock"
+                        : "Buy Now (Add to Cart & WhatsApp)"}
+                    </span>
+                  </>
+                )}
               </button>
 
               <p className="text-center text-3xs text-cm-muted leading-relaxed">

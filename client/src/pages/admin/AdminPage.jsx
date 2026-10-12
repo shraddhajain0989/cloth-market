@@ -23,7 +23,8 @@ import {
   ExternalLink,
   Images,
   ShieldAlert,
-  PackageCheck
+  PackageCheck,
+  Loader2
 } from "lucide-react";
 import { adminApi, productApi, paymentApi, configApi, uploadApi } from "../../api/endpoints";
 import ImageUpload from "../../components/admin/ImageUpload";
@@ -100,6 +101,7 @@ export default function AdminPage() {
   // Rental Lifecycle Filter & Search State
   const [rentalFilterStatus, setRentalFilterStatus] = useState("ALL");
   const [rentalSearch, setRentalSearch] = useState("");
+  const [actionLoadingKey, setActionLoadingKey] = useState("");
 
   // Business QR & WhatsApp Config State
   const [businessConfig, setBusinessConfig] = useState({
@@ -452,42 +454,54 @@ export default function AdminPage() {
 
   // Rental Lifecycle Operations
   async function handleMarkPaymentDone(id) {
+    setActionLoadingKey(`${id}-payment`);
     try {
       await adminApi.markPaymentDone(id);
       setMessage("✅ Payment marked as DONE. Rental confirmed!");
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    } finally {
+      setActionLoadingKey("");
     }
   }
 
   async function handleInitiateRent(id) {
+    setActionLoadingKey(`${id}-initiate`);
     try {
       await adminApi.initiateRent(id);
       setMessage("🚀 Rent initiated successfully. Outfit prepared for customer handover.");
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    } finally {
+      setActionLoadingKey("");
     }
   }
 
   async function handleStartRentPeriod(id) {
+    setActionLoadingKey(`${id}-period`);
     try {
       await adminApi.startRentPeriod(id);
       setMessage("📅 Rent period started. Outfit is now active with customer.");
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    } finally {
+      setActionLoadingKey("");
     }
   }
 
   async function handleMarkRentReceived(id) {
+    setActionLoadingKey(`${id}-receive`);
     try {
       await adminApi.markRentReceived(id);
       setMessage("✨ Cloth received back by Admin. Rental cycle completed!");
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    } finally {
+      setActionLoadingKey("");
     }
   }
 
@@ -495,12 +509,15 @@ export default function AdminPage() {
   const handleMarkProductReceived = handleMarkRentReceived;
 
   async function handleReviewExtension(id, decision) {
+    setActionLoadingKey(`${id}-ext-${decision}`);
     try {
       await adminApi.reviewExtension(id, { decision });
       setMessage(`✅ Extension ${decision.toLowerCase()} successfully.`);
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    } finally {
+      setActionLoadingKey("");
     }
   }
 
@@ -524,7 +541,7 @@ export default function AdminPage() {
         setMessage("✅ Return inspection recorded.");
       }
       setInspectionModal(null);
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ Inspection error: ${err.response?.data?.message || err.message}`);
     }
@@ -542,19 +559,22 @@ export default function AdminPage() {
       });
       setMessage("✅ Damage report registered. Customer settlement pending.");
       setDamageModal(null);
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ Damage report failed: ${err.response?.data?.message || err.message}`);
     }
   }
 
   async function handleResolveDamage(id) {
+    setActionLoadingKey(`${id}-damage`);
     try {
       await adminApi.resolveDamage(id);
       setMessage("✅ Damage settlement resolved and rental completed.");
-      loadData();
+      await loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    } finally {
+      setActionLoadingKey("");
     }
   }
 
@@ -940,10 +960,20 @@ export default function AdminPage() {
                         {stage === "ADDED_TO_CART" && (
                           <button
                             onClick={() => handleMarkPaymentDone(id)}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
+                            disabled={Boolean(actionLoadingKey)}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
                           >
-                            <CheckCircle2 size={14} />
-                            <span>Mark Payment Done</span>
+                            {actionLoadingKey === `${id}-payment` ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                <span>Recording Payment...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={14} />
+                                <span>Mark Payment Done</span>
+                              </>
+                            )}
                           </button>
                         )}
 
@@ -951,10 +981,20 @@ export default function AdminPage() {
                         {stage === "PAYMENT_DONE" && (
                           <button
                             onClick={() => handleInitiateRent(id)}
-                            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
+                            disabled={Boolean(actionLoadingKey)}
+                            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
                           >
-                            <PackageCheck size={14} />
-                            <span>Initiate Rent</span>
+                            {actionLoadingKey === `${id}-initiate` ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                <span>Initiating Rent...</span>
+                              </>
+                            ) : (
+                              <>
+                                <PackageCheck size={14} />
+                                <span>Initiate Rent</span>
+                              </>
+                            )}
                           </button>
                         )}
 
@@ -962,10 +1002,20 @@ export default function AdminPage() {
                         {stage === "RENT_INITIATED" && (
                           <button
                             onClick={() => handleStartRentPeriod(id)}
-                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+                            disabled={Boolean(actionLoadingKey)}
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
                           >
-                            <Calendar size={14} />
-                            <span>Start Rent Period</span>
+                            {actionLoadingKey === `${id}-period` ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                <span>Starting Rent Period...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Calendar size={14} />
+                                <span>Start Rent Period</span>
+                              </>
+                            )}
                           </button>
                         )}
 
@@ -973,10 +1023,20 @@ export default function AdminPage() {
                         {stage === "RENT_PERIOD" && (
                           <button
                             onClick={() => handleMarkRentReceived(id)}
-                            className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 flex items-center gap-1.5"
+                            disabled={Boolean(actionLoadingKey)}
+                            className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 flex items-center gap-1.5"
                           >
-                            <CheckCircle2 size={14} />
-                            <span>Mark Rent Received (Return Completed)</span>
+                            {actionLoadingKey === `${id}-receive` ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin" />
+                                <span>Marking Received...</span>
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={14} />
+                                <span>Mark Rent Received (Return Completed)</span>
+                              </>
+                            )}
                           </button>
                         )}
 
@@ -1012,15 +1072,19 @@ export default function AdminPage() {
                             </span>
                             <button
                               onClick={() => handleReviewExtension(id, "APPROVED")}
-                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold"
+                              disabled={Boolean(actionLoadingKey)}
+                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1"
                             >
-                              Approve
+                              {actionLoadingKey === `${id}-ext-APPROVED` && <Loader2 size={12} className="animate-spin" />}
+                              <span>Approve</span>
                             </button>
                             <button
                               onClick={() => handleReviewExtension(id, "REJECTED")}
-                              className="px-2.5 py-1 rounded-xl bg-cm-red hover:bg-red-700 text-white text-xs font-bold"
+                              disabled={Boolean(actionLoadingKey)}
+                              className="px-2.5 py-1 rounded-xl bg-cm-red hover:bg-red-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1"
                             >
-                              Reject
+                              {actionLoadingKey === `${id}-ext-REJECTED` && <Loader2 size={12} className="animate-spin" />}
+                              <span>Reject</span>
                             </button>
                           </div>
                         )}
@@ -1071,9 +1135,11 @@ export default function AdminPage() {
                         {hasDamage && r.damageReport?.status !== "DAMAGE_RESOLVED" && (
                           <button
                             onClick={() => handleResolveDamage(id)}
-                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold transition-colors"
+                            disabled={Boolean(actionLoadingKey)}
+                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs font-bold transition-colors flex items-center gap-1"
                           >
-                            Resolve Damage (₹{r.damageReport?.amount}) & Complete
+                            {actionLoadingKey === `${id}-damage` && <Loader2 size={12} className="animate-spin" />}
+                            <span>Resolve Damage (₹{r.damageReport?.amount}) & Complete</span>
                           </button>
                         )}
 

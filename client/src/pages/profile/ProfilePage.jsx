@@ -7,7 +7,8 @@ import {
   AlertTriangle,
   RotateCcw,
   Sparkles,
-  X
+  X,
+  Loader2
 } from "lucide-react";
 import { rentalApi, userApi } from "../../api/endpoints";
 
@@ -65,6 +66,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
   const [rentals, setRentals] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [ackLoadingId, setAckLoadingId] = useState("");
   const [message, setMessage] = useState("");
 
   // Extension Modal
@@ -93,12 +95,15 @@ export default function ProfilePage() {
   }, []);
 
   async function handleAcknowledgeHandover(rentalId) {
+    setAckLoadingId(rentalId);
     try {
       await rentalApi.acknowledgeHandover(rentalId);
       setMessage("You have confirmed receipt of the item and verified condition.");
       loadData();
     } catch (err) {
       setMessage(err.response?.data?.message || "Acknowledgement failed.");
+    } finally {
+      setAckLoadingId("");
     }
   }
 
@@ -352,10 +357,18 @@ export default function ProfilePage() {
                         </p>
                         <button
                           type="button"
+                          disabled={ackLoadingId === id}
                           onClick={() => handleAcknowledgeHandover(id)}
-                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors"
+                          className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
                         >
-                          I Agree & Receive Item
+                          {ackLoadingId === id ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin" />
+                              <span>Confirming...</span>
+                            </>
+                          ) : (
+                            <span>I Agree & Receive Item</span>
+                          )}
                         </button>
                       </div>
                     ) : (
@@ -444,9 +457,16 @@ export default function ProfilePage() {
               <button
                 type="submit"
                 disabled={extending}
-                className="w-full py-2.5 rounded-xl bg-cm-black text-white text-xs font-bold uppercase hover:bg-cm-red transition-colors disabled:opacity-50"
+                className="w-full py-2.5 rounded-xl bg-cm-black text-white text-xs font-bold uppercase hover:bg-cm-red transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
               >
-                {extending ? "Submitting..." : "Submit Extension Request"}
+                {extending ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <span>Submit Extension Request</span>
+                )}
               </button>
             </form>
           </div>
