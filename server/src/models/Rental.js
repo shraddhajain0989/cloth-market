@@ -117,20 +117,25 @@ const rentalSchema = new mongoose.Schema(
     rentalStatus: {
       type: String,
       enum: [
+        "ADDED_TO_CART",
         "PENDING_ADVANCE",
+        "PAYMENT_DONE",
         "CONFIRMED",
+        "RENT_INITIATED",
         "READY_FOR_HANDOVER",
         "HANDOVER_INSPECTION",
+        "RENT_PERIOD",
         "ACTIVE_RENTAL",
         "EXTENSION_REQUESTED",
         "EXTENDED",
         "RETURN_INSPECTION",
         "DAMAGE_REPORTED",
         "DAMAGE_SETTLEMENT",
+        "RENT_RECEIVED",
         "COMPLETED",
         "CANCELLED"
       ],
-      default: "PENDING_ADVANCE"
+      default: "ADDED_TO_CART"
     },
     handoverInspection: { type: handoverInspectionSchema, default: () => ({}) },
     returnInspection: { type: returnInspectionSchema, default: () => ({}) },

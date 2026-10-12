@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, ShoppingBag, Trash2, ArrowRight, ShieldCheck, Tag, Plus, Minus } from "lucide-react";
-import { orderApi } from "../../api/endpoints";
+import { X, ShoppingBag, Trash2, ArrowRight, ShieldCheck, Tag, Plus, Minus, MessageCircle, Calendar } from "lucide-react";
+import { orderApi, configApi } from "../../api/endpoints";
 import { useAuthStore } from "../../store/authStore";
 
 export default function CartDrawer({ open, onClose, onOrderPlaced }) {
@@ -24,6 +24,32 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
   });
 
   const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [businessConfig, setBusinessConfig] = useState(null);
+
+  useEffect(() => {
+    configApi
+      .getPublic()
+      .then((res) => {
+        setBusinessConfig(res.data?.data || null);
+      })
+      .catch(() => {});
+  }, []);
+
+  function handleOpenWhatsApp(item) {
+    const rawPhone = businessConfig?.whatsappNumber || "";
+    const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
+    if (!cleanPhone) return;
+    const msg = `Hello Cloth Market! Checking on my rental outfit in my cart:
+
+*Outfit:* ${item.name}
+*Size:* ${item.size || "M"}
+*Rental Dates:* ${item.rentalStartDate || "TBD"} to ${item.rentalEndDate || "TBD"} (${item.rentalDuration || 1} days)
+*Price:* ₹${item.price?.toLocaleString("en-IN")}
+
+Please confirm reservation and payment instructions.`;
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 
   useEffect(() => {
     if (open && user) {
@@ -194,46 +220,91 @@ export default function CartDrawer({ open, onClose, onOrderPlaced }) {
                 <>
                   {/* Cart Item List */}
                   <div className="space-y-4">
-                    {cartItems.map((item) => (
-                      <div key={item.productId} className="flex gap-4 p-3 border border-cm-border rounded-2xl bg-white shadow-sm items-center">
-                        <img
-                          src={item.image || "https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=200&auto=format&fit=crop"}
-                          alt={item.name}
-                          className="w-16 h-20 object-cover rounded-xl bg-cm-soft shrink-0"
-                        />
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <h4 className="font-display font-bold text-sm text-cm-black truncate">{item.name}</h4>
-                          <p className="font-bold text-xs text-cm-red">₹{item.price?.toLocaleString("en-IN")}</p>
-
-                          {/* Qty Counter */}
-                          <div className="flex items-center gap-2 pt-1">
-                            <div className="flex items-center border border-cm-border rounded-lg bg-cm-soft">
-                              <button
-                                onClick={() => handleQtyChange(item.productId, item.quantity, -1)}
-                                className="p-1 hover:bg-cm-border rounded-l-lg"
-                              >
-                                <Minus size={12} />
-                              </button>
-                              <span className="px-2 text-xs font-bold text-cm-black">{item.quantity}</span>
-                              <button
-                                onClick={() => handleQtyChange(item.productId, item.quantity, 1)}
-                                className="p-1 hover:bg-cm-border rounded-r-lg"
-                              >
-                                <Plus size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => handleRemove(item.productId)}
-                          className="p-2 text-cm-muted hover:text-cm-red transition-colors"
-                          title="Remove item"
+                    {cartItems.map((item) => {
+                      const isRental = item.itemType === "RENT" || Boolean(item.rentalStartDate);
+                      return (
+                        <div
+                          key={item.productId + (item.size || "")}
+                          className="flex gap-4 p-3 border border-cm-border rounded-2xl bg-white shadow-sm items-center"
                         >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
+                          <img
+                            src={
+                              item.image ||
+                              "https://images.unsplash.com/photo-1551028719-00167b16eac5?q=80&w=200&auto=format&fit=crop"
+                            }
+                            alt={item.name}
+                            className="w-16 h-20 object-cover rounded-xl bg-cm-soft shrink-0"
+                          />
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider ${
+                                  isRental ? "bg-cm-black text-white" : "bg-emerald-800 text-white"
+                                }`}
+                              >
+                                {isRental ? "Rental" : "Purchase"}
+                              </span>
+                              {item.size && (
+                                <span className="text-3xs font-bold text-cm-muted bg-cm-soft px-1.5 py-0.5 rounded">
+                                  Size: {item.size}
+                                </span>
+                              )}
+                            </div>
+
+                            <h4 className="font-display font-bold text-sm text-cm-black truncate">{item.name}</h4>
+
+                            {isRental && item.rentalStartDate && (
+                              <p className="text-3xs text-cm-muted flex items-center gap-1">
+                                <Calendar size={11} className="text-cm-red" />
+                                <span>
+                                  {item.rentalStartDate} → {item.rentalEndDate} ({item.rentalDuration || 1}d)
+                                </span>
+                              </p>
+                            )}
+
+                            <p className="font-bold text-xs text-cm-red">₹{item.price?.toLocaleString("en-IN")}</p>
+
+                            {/* Qty or WhatsApp confirm button */}
+                            {isRental ? (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenWhatsApp(item)}
+                                className="mt-1 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-3xs font-bold transition-colors"
+                              >
+                                <MessageCircle size={11} />
+                                <span>Confirm on WhatsApp</span>
+                              </button>
+                            ) : (
+                              <div className="flex items-center gap-2 pt-1">
+                                <div className="flex items-center border border-cm-border rounded-lg bg-cm-soft">
+                                  <button
+                                    onClick={() => handleQtyChange(item.productId, item.quantity, -1)}
+                                    className="p-1 hover:bg-cm-border rounded-l-lg"
+                                  >
+                                    <Minus size={12} />
+                                  </button>
+                                  <span className="px-2 text-xs font-bold text-cm-black">{item.quantity}</span>
+                                  <button
+                                    onClick={() => handleQtyChange(item.productId, item.quantity, 1)}
+                                    className="p-1 hover:bg-cm-border rounded-r-lg"
+                                  >
+                                    <Plus size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <button
+                            onClick={() => handleRemove(item.productId)}
+                            className="p-2 text-cm-muted hover:text-cm-red transition-colors"
+                            title="Remove item"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Coupon Box */}

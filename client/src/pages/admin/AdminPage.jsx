@@ -31,6 +31,15 @@ import SectionHeader from "../../components/common/SectionHeader";
 
 const ALL_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
 
+export function normalizeRentalStatus(status) {
+  if (status === "ADDED_TO_CART" || status === "PENDING_ADVANCE") return "ADDED_TO_CART";
+  if (status === "PAYMENT_DONE" || status === "CONFIRMED" || status === "READY_FOR_HANDOVER") return "PAYMENT_DONE";
+  if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION") return "RENT_INITIATED";
+  if (status === "RENT_PERIOD" || status === "ACTIVE_RENTAL" || status === "EXTENSION_REQUESTED" || status === "EXTENDED") return "RENT_PERIOD";
+  if (status === "RENT_RECEIVED" || status === "COMPLETED" || status === "RETURN_INSPECTION" || status === "DAMAGE_REPORTED" || status === "DAMAGE_SETTLEMENT") return "RENT_RECEIVED";
+  return status || "ADDED_TO_CART";
+}
+
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("rentals"); // 'rentals' | 'inventory' | 'add' | 'payments' | 'settings'
   const [dashboard, setDashboard] = useState(null);
@@ -87,6 +96,10 @@ export default function AdminPage() {
     rejectionReason: "",
     notes: ""
   });
+
+  // Rental Lifecycle Filter & Search State
+  const [rentalFilterStatus, setRentalFilterStatus] = useState("ALL");
+  const [rentalSearch, setRentalSearch] = useState("");
 
   // Business QR & WhatsApp Config State
   const [businessConfig, setBusinessConfig] = useState({
@@ -438,25 +451,48 @@ export default function AdminPage() {
   }
 
   // Rental Lifecycle Operations
-  async function handleConfirmPayment(id) {
+  async function handleMarkPaymentDone(id) {
     try {
-      await adminApi.confirmPayment(id);
-      setMessage("✅ Payment confirmed received. Rental is CONFIRMED.");
+      await adminApi.markPaymentDone(id);
+      setMessage("✅ Payment marked as DONE. Rental confirmed!");
       loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
     }
   }
 
-  async function handleMarkProductReceived(id) {
+  async function handleInitiateRent(id) {
     try {
-      await adminApi.markProductReceived(id);
-      setMessage("✅ Product marked as received. Rental completed.");
+      await adminApi.initiateRent(id);
+      setMessage("🚀 Rent initiated successfully. Outfit prepared for customer handover.");
       loadData();
     } catch (err) {
       setMessage(`❌ ${err.response?.data?.message || err.message}`);
     }
   }
+
+  async function handleStartRentPeriod(id) {
+    try {
+      await adminApi.startRentPeriod(id);
+      setMessage("📅 Rent period started. Outfit is now active with customer.");
+      loadData();
+    } catch (err) {
+      setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    }
+  }
+
+  async function handleMarkRentReceived(id) {
+    try {
+      await adminApi.markRentReceived(id);
+      setMessage("✨ Cloth received back by Admin. Rental cycle completed!");
+      loadData();
+    } catch (err) {
+      setMessage(`❌ ${err.response?.data?.message || err.message}`);
+    }
+  }
+
+  const handleConfirmPayment = handleMarkPaymentDone;
+  const handleMarkProductReceived = handleMarkRentReceived;
 
   async function handleReviewExtension(id, decision) {
     try {
@@ -668,26 +704,155 @@ export default function AdminPage() {
 
       {/* ── TAB 1: RENTALS MANAGEMENT ────────────────────────────────────────── */}
       {activeTab === "rentals" && (
-        <div className="space-y-4">
-          <div className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm overflow-x-auto">
-            <h3 className="text-lg font-display font-bold text-cm-black mb-4">Rental Orders & Lifecycle Fulfillments</h3>
-            
-            {!rentals.length ? (
-              <p className="text-xs text-cm-muted py-8 text-center">No rental orders placed yet.</p>
-            ) : (
+        <div className="space-y-6">
+          {/* Top Rental Lifecycle KPIs */}
+          <div className="rounded-3xl bg-white border border-cm-border p-6 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-cm-border">
+              <div>
+                <h3 className="text-xl font-display font-bold text-cm-black">Rental Lifecycle Tracking</h3>
+                <p className="text-xs text-cm-muted">
+                  Follow each booking: <strong>Added to Cart</strong> → <strong>Payment Done</strong> → <strong>Rent Initiated</strong> → <strong>Rent Period</strong> → <strong>Rent Received</strong>
+                </p>
+              </div>
+
+              {/* Search & Filters */}
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Search customer, cloth, ref..."
+                  value={rentalSearch}
+                  onChange={(e) => setRentalSearch(e.target.value)}
+                  className="px-3.5 py-2 text-xs rounded-xl border border-cm-border focus:border-cm-black"
+                />
+
+                <select
+                  value={rentalFilterStatus}
+                  onChange={(e) => setRentalFilterStatus(e.target.value)}
+                  className="px-3 py-2 text-xs rounded-xl border border-cm-border bg-white font-medium"
+                >
+                  <option value="ALL">All Stages</option>
+                  <option value="ADDED_TO_CART">1. Added to Cart (Enquiries)</option>
+                  <option value="PAYMENT_DONE">2. Payment Done</option>
+                  <option value="RENT_INITIATED">3. Rent Initiated</option>
+                  <option value="RENT_PERIOD">4. Rent Period (Active)</option>
+                  <option value="RENT_RECEIVED">5. Rent Received (Completed)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Status KPI Summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
+              <div className="p-3 rounded-2xl bg-cm-soft border border-cm-border">
+                <span className="text-[10px] uppercase font-bold text-cm-muted block">Total Tracked</span>
+                <span className="text-lg font-bold text-cm-black">{rentals.length}</span>
+              </div>
+              <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200">
+                <span className="text-[10px] uppercase font-bold text-amber-800 block">Added to Cart</span>
+                <span className="text-lg font-bold text-amber-800">
+                  {rentals.filter((r) => normalizeRentalStatus(r.rentalStatus) === "ADDED_TO_CART").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200">
+                <span className="text-[10px] uppercase font-bold text-blue-800 block">Payment Done</span>
+                <span className="text-lg font-bold text-blue-800">
+                  {rentals.filter((r) => normalizeRentalStatus(r.rentalStatus) === "PAYMENT_DONE").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-purple-50 border border-purple-200">
+                <span className="text-[10px] uppercase font-bold text-purple-800 block">Rent Initiated</span>
+                <span className="text-lg font-bold text-purple-800">
+                  {rentals.filter((r) => normalizeRentalStatus(r.rentalStatus) === "RENT_INITIATED").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200">
+                <span className="text-[10px] uppercase font-bold text-emerald-800 block">In Rent Period</span>
+                <span className="text-lg font-bold text-emerald-800">
+                  {rentals.filter((r) => normalizeRentalStatus(r.rentalStatus) === "RENT_PERIOD").length}
+                </span>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-100 border border-slate-300">
+                <span className="text-[10px] uppercase font-bold text-slate-800 block">Rent Received</span>
+                <span className="text-lg font-bold text-slate-800">
+                  {rentals.filter((r) => normalizeRentalStatus(r.rentalStatus) === "RENT_RECEIVED").length}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Rentals */}
+          {(() => {
+            const filteredRentals = rentals.filter((r) => {
+              const norm = normalizeRentalStatus(r.rentalStatus);
+              if (rentalFilterStatus !== "ALL" && norm !== rentalFilterStatus) return false;
+              if (rentalSearch.trim()) {
+                const q = rentalSearch.toLowerCase();
+                const name = (r.clothSnapshot?.name || r.productName || "").toLowerCase();
+                const custName = (r.customer?.name || "").toLowerCase();
+                const custEmail = (r.customer?.email || "").toLowerCase();
+                const id = (r.id || r._id || "").toLowerCase();
+                if (!name.includes(q) && !custName.includes(q) && !custEmail.includes(q) && !id.includes(q)) {
+                  return false;
+                }
+              }
+              return true;
+            });
+
+            if (!filteredRentals.length) {
+              return (
+                <div className="rounded-3xl bg-white border border-cm-border p-12 text-center shadow-sm">
+                  <Package size={36} className="mx-auto text-cm-muted mb-2" />
+                  <p className="text-sm font-semibold text-cm-black">No rental orders found.</p>
+                  <p className="text-xs text-cm-muted mt-1">
+                    When customers click rent on outfits, they appear here as "Added to Cart" for WhatsApp payment confirmation.
+                  </p>
+                </div>
+              );
+            }
+
+            return (
               <div className="space-y-4">
-                {rentals.map((r) => {
+                {filteredRentals.map((r) => {
                   const id = r.id || r._id;
-                  const hasAdvance = r.advanceStatus === "ADVANCE_RECEIVED";
+                  const stage = normalizeRentalStatus(r.rentalStatus);
+                  const hasAdvance = r.advanceStatus === "ADVANCE_RECEIVED" || stage !== "ADDED_TO_CART";
                   const hasHandover = r.rentalStatus === "HANDOVER_INSPECTION" || r.handoverInspection?.inspectedAt;
-                  const hasRemaining = r.remainingPaymentStatus === "REMAINING_RECEIVED";
                   const hasExtension = r.extensionHistory?.some((e) => e.status === "REQUESTED");
                   const hasDamage = r.rentalStatus === "DAMAGE_REPORTED" || r.damageReport?.damageDetected;
+
+                  const STAGE_META = {
+                    ADDED_TO_CART: {
+                      title: "🛒 Added to Cart (WhatsApp Enquiry)",
+                      badgeClass: "bg-amber-100 text-amber-900 border-amber-300",
+                      helper: "Customer clicked Rent and added outfit to cart. Awaiting WhatsApp rent confirmation."
+                    },
+                    PAYMENT_DONE: {
+                      title: "✓ Payment Done",
+                      badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+                      helper: "Customer confirmed on WhatsApp & payment is recorded. Next step: Initiate Rent."
+                    },
+                    RENT_INITIATED: {
+                      title: "🚀 Rent Initiated",
+                      badgeClass: "bg-purple-100 text-purple-900 border-purple-300",
+                      helper: "Outfit is prepared. Next step: Start Rent Period upon customer handover."
+                    },
+                    RENT_PERIOD: {
+                      title: "📅 Rent Period (Active)",
+                      badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300",
+                      helper: "Customer is currently enjoying the outfit. Next step: Mark Rent Received when returned."
+                    },
+                    RENT_RECEIVED: {
+                      title: "✨ Rent Received (Completed)",
+                      badgeClass: "bg-slate-100 text-slate-800 border-slate-300",
+                      helper: "Cloth received back by Admin. Inventory slot released and rental cycle completed."
+                    }
+                  };
+
+                  const currentMeta = STAGE_META[stage] || STAGE_META.ADDED_TO_CART;
 
                   return (
                     <div
                       key={id}
-                      className="rounded-2xl border border-cm-border p-5 bg-cm-soft/40 space-y-3"
+                      className="rounded-3xl border border-cm-border p-5 bg-white shadow-sm space-y-4 hover:shadow-md transition-shadow"
                     >
                       {/* Top Header */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-cm-border">
@@ -696,81 +861,127 @@ export default function AdminPage() {
                             <img
                               src={r.clothSnapshot.image}
                               alt={r.clothSnapshot.name}
-                              className="w-12 h-12 rounded-xl object-cover border border-cm-border"
+                              className="w-14 h-14 rounded-2xl object-cover border border-cm-border shadow-xs"
                             />
                           ) : (
-                            <div className="w-12 h-12 rounded-xl bg-cm-soft border border-cm-border flex items-center justify-center font-bold text-xs">
+                            <div className="w-14 h-14 rounded-2xl bg-cm-soft border border-cm-border flex items-center justify-center font-bold text-sm">
                               {r.productName?.[0] || "C"}
                             </div>
                           )}
                           <div>
-                            <div className="flex items-center gap-2">
-                              <h4 className="font-display font-bold text-sm text-cm-black">{r.clothSnapshot?.name || r.productName}</h4>
-                              <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-cm-black text-white">Size: {r.size}</span>
-                              <span className="px-2.5 py-0.5 rounded-full text-2xs font-bold border border-cm-border bg-white text-cm-black">
-                                Status: {r.rentalStatus}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="font-display font-bold text-sm text-cm-black">
+                                {r.clothSnapshot?.name || r.productName}
+                              </h4>
+                              <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-cm-black text-white">
+                                Size: {r.size}
+                              </span>
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-2xs font-bold border ${currentMeta.badgeClass}`}
+                              >
+                                {currentMeta.title}
                               </span>
                             </div>
                             <p className="text-2xs text-cm-muted mt-0.5">
                               Customer: <strong className="text-cm-black">{r.customer?.name}</strong> ({r.customer?.email}) • ID: {id}
+                            </p>
+                            <p className="text-3xs text-slate-600 mt-0.5 font-medium">
+                              {currentMeta.helper}
                             </p>
                           </div>
                         </div>
 
                         {/* Dates & Financials */}
                         <div className="text-right text-xs">
-                          <p className="font-bold text-cm-red text-sm">₹{r.rentalAmount} Total</p>
+                          <p className="font-bold text-cm-red text-base">₹{r.rentalAmount} Total</p>
                           <p className="text-2xs text-cm-muted">
-                            Period: {r.rentalStartDate} → {r.currentEndDate} ({r.rentalDuration} days)
+                            {r.rentalStartDate} → {r.currentEndDate} ({r.rentalDuration} days)
                           </p>
                         </div>
                       </div>
 
-                      {/* Payment & Inspection Badges */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-2xs">
-                        <div className="p-2 rounded-xl bg-white border border-cm-border">
-                          <span className="text-cm-muted block">Payment Status:</span>
-                          <span className={`font-bold ${hasAdvance ? "text-emerald-700" : "text-amber-600"}`}>
-                            {hasAdvance ? "✓ PAYMENT RECEIVED" : "⏳ PAYMENT PENDING"}
-                          </span>
-                        </div>
+                      {/* 5-Step Visual Progression Indicator */}
+                      <div className="bg-cm-soft/40 p-3 rounded-2xl border border-cm-border/60">
+                        <div className="grid grid-cols-5 gap-1.5 text-center text-3xs font-semibold">
+                          {[
+                            { key: "ADDED_TO_CART", label: "1. Added to Cart" },
+                            { key: "PAYMENT_DONE", label: "2. Payment Done" },
+                            { key: "RENT_INITIATED", label: "3. Rent Initiated" },
+                            { key: "RENT_PERIOD", label: "4. Rent Period" },
+                            { key: "RENT_RECEIVED", label: "5. Rent Received" }
+                          ].map((step, idx) => {
+                            const stepOrder = ["ADDED_TO_CART", "PAYMENT_DONE", "RENT_INITIATED", "RENT_PERIOD", "RENT_RECEIVED"];
+                            const currentIdx = stepOrder.indexOf(stage);
+                            const isDone = idx <= currentIdx;
+                            const isCurrent = idx === currentIdx;
 
-                        <div className="p-2 rounded-xl bg-white border border-cm-border">
-                          <span className="text-cm-muted block">Full Rental Fee:</span>
-                          <span className="font-bold text-cm-black">
-                            ₹{r.rentalAmount}
-                          </span>
-                        </div>
-
-                        <div className="p-2 rounded-xl bg-white border border-cm-border">
-                          <span className="text-cm-muted block">Handover Inspection:</span>
-                          <span className={`font-bold ${hasHandover ? "text-emerald-700" : "text-cm-muted"}`}>
-                            {hasHandover ? `✓ ${r.handoverInspection?.condition}` : "NOT PERFORMED"}
-                          </span>
-                        </div>
-
-                        <div className="p-2 rounded-xl bg-white border border-cm-border">
-                          <span className="text-cm-muted block">Damage Status:</span>
-                          <span className={`font-bold ${hasDamage ? "text-cm-red" : "text-emerald-700"}`}>
-                            {hasDamage ? `⚠️ ₹${r.damageReport?.amount || 0} (${r.damageReport?.status})` : "✓ NONE"}
-                          </span>
+                            return (
+                              <div
+                                key={step.key}
+                                className={`p-1.5 rounded-xl border flex flex-col items-center justify-center gap-0.5 ${
+                                  isCurrent
+                                    ? "bg-cm-black text-white border-cm-black font-bold shadow-xs"
+                                    : isDone
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : "bg-white text-cm-muted border-cm-border/70"
+                                }`}
+                              >
+                                <span>{isDone && !isCurrent ? "✓" : `Step ${idx + 1}`}</span>
+                                <span className="truncate max-w-full text-[10px]">{step.label.split(". ")[1]}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
 
                       {/* Action Buttons for Lifecycle Transitions */}
-                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-cm-border/60">
-                        {/* 1. Confirm Payment Received */}
-                        {!hasAdvance && (
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-cm-border/60">
+                        {/* 1. Mark Payment Done (When in ADDED_TO_CART) */}
+                        {stage === "ADDED_TO_CART" && (
                           <button
-                            onClick={() => handleConfirmPayment(id)}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                            onClick={() => handleMarkPaymentDone(id)}
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
                           >
-                            Mark Payment Received
+                            <CheckCircle2 size={14} />
+                            <span>Mark Payment Done</span>
                           </button>
                         )}
 
-                        {/* 2. Handover Inspection */}
-                        {hasAdvance && !hasHandover && (
+                        {/* 2. Initiate Rent (When in PAYMENT_DONE) */}
+                        {stage === "PAYMENT_DONE" && (
+                          <button
+                            onClick={() => handleInitiateRent(id)}
+                            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
+                          >
+                            <PackageCheck size={14} />
+                            <span>Initiate Rent</span>
+                          </button>
+                        )}
+
+                        {/* 3. Start Rent Period (When in RENT_INITIATED) */}
+                        {stage === "RENT_INITIATED" && (
+                          <button
+                            onClick={() => handleStartRentPeriod(id)}
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+                          >
+                            <Calendar size={14} />
+                            <span>Start Rent Period</span>
+                          </button>
+                        )}
+
+                        {/* 4. Mark Rent Received (When in RENT_PERIOD) */}
+                        {stage === "RENT_PERIOD" && (
+                          <button
+                            onClick={() => handleMarkRentReceived(id)}
+                            className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 flex items-center gap-1.5"
+                          >
+                            <CheckCircle2 size={14} />
+                            <span>Mark Rent Received (Return Completed)</span>
+                          </button>
+                        )}
+
+                        {/* Optional Handover Inspection */}
+                        {hasAdvance && stage !== "RENT_RECEIVED" && !hasHandover && (
                           <button
                             onClick={() => {
                               setInspectionData({
@@ -786,14 +997,14 @@ export default function AdminPage() {
                               });
                               setInspectionModal({ type: "handover", rental: r });
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1.5 rounded-xl border border-cm-border hover:bg-cm-soft text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5"
                           >
-                            <Camera size={14} />
-                            <span>Perform Handover Inspection</span>
+                            <Camera size={13} />
+                            <span>Handover Inspection</span>
                           </button>
                         )}
 
-                        {/* 3. Handle Extension Requests */}
+                        {/* Handle Extension Requests if present */}
                         {hasExtension && (
                           <div className="flex items-center gap-1.5">
                             <span className="text-2xs font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-xl">
@@ -814,8 +1025,8 @@ export default function AdminPage() {
                           </div>
                         )}
 
-                        {/* 4. Return Inspection */}
-                        {hasAdvance && r.rentalStatus !== "COMPLETED" && (
+                        {/* Return Inspection */}
+                        {hasAdvance && stage !== "RENT_RECEIVED" && (
                           <button
                             onClick={() => {
                               setInspectionData({
@@ -831,32 +1042,32 @@ export default function AdminPage() {
                               });
                               setInspectionModal({ type: "return", rental: r });
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1.5 rounded-xl border border-cm-border hover:bg-cm-soft text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5"
                           >
-                            <Camera size={14} />
+                            <Camera size={13} />
                             <span>Return Inspection</span>
                           </button>
                         )}
 
-                        {/* 5. Report Damage */}
-                        {r.rentalStatus !== "COMPLETED" && !hasDamage && (
+                        {/* Report Damage */}
+                        {stage !== "RENT_RECEIVED" && !hasDamage && (
                           <button
                             onClick={() => {
                               setDamageData({
-                                description: "Tear observed on sleeve",
+                                description: "Tear observed on garment",
                                 severity: "minor",
                                 amount: 300,
                                 photoUrl: ""
                               });
                               setDamageModal(r);
                             }}
-                            className="px-3 py-1.5 rounded-xl border border-cm-red text-cm-red hover:bg-red-50 text-xs font-bold transition-colors"
+                            className="px-3 py-1.5 rounded-xl border border-cm-red/40 text-cm-red hover:bg-red-50 text-xs font-semibold transition-colors"
                           >
                             Report Damage
                           </button>
                         )}
 
-                        {/* 6. Resolve Damage */}
+                        {/* Resolve Damage */}
                         {hasDamage && r.damageReport?.status !== "DAMAGE_RESOLVED" && (
                           <button
                             onClick={() => handleResolveDamage(id)}
@@ -866,23 +1077,18 @@ export default function AdminPage() {
                           </button>
                         )}
 
-                        {/* 7. Mark Product Received */}
-                        {hasAdvance && r.rentalStatus !== "COMPLETED" && !hasDamage && (
-                          <button
-                            onClick={() => handleMarkProductReceived(id)}
-                            className="px-3.5 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors flex items-center gap-1.5"
-                          >
-                            <PackageCheck size={14} />
-                            <span>Mark Product Received</span>
-                          </button>
+                        {stage === "RENT_RECEIVED" && (
+                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 px-2 py-1 bg-emerald-50 rounded-lg">
+                            <CheckCircle2 size={13} /> Cloth Received • Rental Finished
+                          </span>
                         )}
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
-          </div>
+            );
+          })()}
         </div>
       )}
 

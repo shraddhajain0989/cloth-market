@@ -11,7 +11,17 @@ export async function getCart(req, res) {
 }
 
 export async function addToCart(req, res) {
-  const { productId, quantity = 1 } = req.body;
+  const {
+    productId,
+    quantity = 1,
+    itemType = "RENT",
+    size = "M",
+    rentalStartDate,
+    rentalEndDate,
+    rentalDuration = 1,
+    rentalAmount,
+    rentalId
+  } = req.body;
   const qty = Math.max(1, Number(quantity || 1));
 
   const product = await Product.findById(productId);
@@ -19,29 +29,51 @@ export async function addToCart(req, res) {
     return fail(res, 404, "Product is currently unavailable.");
   }
 
-  if (product.stock < qty) {
+  const isRental = String(itemType).toUpperCase() === "RENT";
+  if (!isRental && product.stock < qty) {
     return fail(res, 400, `Only ${product.stock} unit(s) available in stock.`);
   }
 
   const user = await User.findById(req.user._id);
-  const existing = user.cart.find((item) => item.productId === String(productId));
+  const existing = user.cart.find(
+    (item) =>
+      item.productId === String(productId) &&
+      (item.itemType || "RENT") === (isRental ? "RENT" : "BUY") &&
+      (item.size || "M") === size
+  );
+
+  const calculatedRentalAmount =
+    Number(rentalAmount) || ((Number(product.rentPrice) || 0) * (Number(rentalDuration) || 1));
+  const finalPrice = isRental
+    ? calculatedRentalAmount
+    : (product.flashSalePrice || product.price);
 
   if (existing) {
-    const newQty = existing.quantity + qty;
-    if (newQty > product.stock) {
-      return fail(res, 400, `Cannot add more. Only ${product.stock} unit(s) in stock.`);
-    }
-    existing.quantity = newQty;
-    existing.price = product.flashSalePrice || product.price;
+    existing.quantity = isRental ? 1 : existing.quantity + qty;
+    existing.price = finalPrice;
     existing.name = product.name;
     existing.image = product.images?.[0] || "";
+    existing.size = size;
+    existing.itemType = isRental ? "RENT" : "BUY";
+    if (rentalStartDate) existing.rentalStartDate = rentalStartDate;
+    if (rentalEndDate) existing.rentalEndDate = rentalEndDate;
+    if (rentalDuration) existing.rentalDuration = Number(rentalDuration);
+    if (rentalAmount) existing.rentalAmount = calculatedRentalAmount;
+    if (rentalId) existing.rentalId = String(rentalId);
   } else {
     user.cart.push({
       productId: product.id,
       name: product.name,
-      price: product.flashSalePrice || product.price,
+      price: finalPrice,
       image: product.images?.[0] || "",
-      quantity: qty
+      quantity: isRental ? 1 : qty,
+      itemType: isRental ? "RENT" : "BUY",
+      size,
+      rentalStartDate,
+      rentalEndDate,
+      rentalDuration: Number(rentalDuration) || 1,
+      rentalAmount: isRental ? calculatedRentalAmount : undefined,
+      rentalId: rentalId ? String(rentalId) : undefined
     });
   }
 

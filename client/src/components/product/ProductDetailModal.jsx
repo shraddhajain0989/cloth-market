@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   X,
   MessageCircle,
@@ -9,9 +10,11 @@ import {
   ChevronRight,
   ShieldCheck,
   Sparkles,
-  Tag
+  Tag,
+  ShoppingBag
 } from "lucide-react";
-import { configApi, paymentApi, rentalApi } from "../../api/endpoints";
+import { configApi, paymentApi, rentalApi, orderApi } from "../../api/endpoints";
+import { useAuthStore } from "../../store/authStore";
 
 export default function ProductDetailModal({
   product,
@@ -20,6 +23,9 @@ export default function ProductDetailModal({
   initialMode = "rent" // 'rent' | 'buy'
 }) {
   if (!open || !product) return null;
+
+  const navigate = useNavigate();
+  const user = useAuthStore((state) => state.user);
 
   const images = Array.isArray(product.images) && product.images.length > 0
     ? product.images
@@ -147,6 +153,14 @@ export default function ProductDetailModal({
     e.preventDefault();
     setErrorMsg("");
 
+    if (!user) {
+      setErrorMsg("Please log in first to rent this outfit and add it to your cart.");
+      setTimeout(() => {
+        navigate("/login");
+      }, 1200);
+      return;
+    }
+
     const rawPhone = businessConfig?.whatsappNumber || "";
     const cleanPhone = rawPhone.replace(/[^0-9]/g, "");
 
@@ -200,29 +214,69 @@ export default function ProductDetailModal({
 
 Please confirm availability and share payment instructions.`;
 
-      // Log payment tracking record as customer enquiry initiation
+      // 1. FAST REDIRECT: Open WhatsApp IMMEDIATELY upon user click (0ms delay)
+      const encoded = encodeURIComponent(messageText);
+      const waUrl = `https://wa.me/${cleanPhone}?text=${encoded}`;
+      window.open(waUrl, "_blank", "noopener,noreferrer");
+      setWhatsappNotice(true);
+
+      // 2. Add to Cart & Create Rental with ADDED_TO_CART status in parallel
       setSubmitting(true);
-      try {
-        await paymentApi.create({
-          customerReference: refCode,
-          productId: prodId,
-          productName: product.name,
-          transactionType: "RENT",
-          size: selectedSize,
-          rentalStartDate: startDate,
-          rentalEndDate: endDate,
-          rentalDuration: durationDays,
-          expectedAmount: totalRentalAmount,
-          totalAmount: totalRentalAmount,
-          advanceAmount: 0,
-          remainingAmount: 0,
-          status: "Enquiry Initiated"
-        });
-      } catch (err) {
-        console.warn("Payment tracking record log notice:", err.message);
-      } finally {
-        setSubmitting(false);
-      }
+      (async () => {
+        try {
+          let createdRental = null;
+          try {
+            const rentalRes = await rentalApi.create({
+              productId: prodId,
+              size: selectedSize,
+              pickupDate: startDate,
+              returnDate: endDate,
+              rentalStatus: "ADDED_TO_CART"
+            });
+            createdRental = rentalRes.data?.data;
+          } catch (rErr) {
+            console.warn("Rental record notice:", rErr.message);
+          }
+
+          // Add to user cart
+          try {
+            await orderApi.addToCart({
+              productId: prodId,
+              itemType: "RENT",
+              size: selectedSize,
+              rentalStartDate: startDate,
+              rentalEndDate: endDate,
+              rentalDuration: durationDays,
+              rentalAmount: totalRentalAmount,
+              rentalId: createdRental?._id || createdRental?.id
+            });
+          } catch (cErr) {
+            console.warn("Cart add notice:", cErr.message);
+          }
+
+          // Log payment tracking record
+          await paymentApi.create({
+            customerReference: refCode,
+            productId: prodId,
+            productName: product.name,
+            transactionType: "RENT",
+            size: selectedSize,
+            rentalStartDate: startDate,
+            rentalEndDate: endDate,
+            rentalDuration: durationDays,
+            expectedAmount: totalRentalAmount,
+            totalAmount: totalRentalAmount,
+            advanceAmount: 0,
+            remainingAmount: 0,
+            status: "Enquiry Initiated",
+            rentalId: createdRental?._id || createdRental?.id
+          });
+        } catch (err) {
+          console.warn("Background order sync notice:", err.message);
+        } finally {
+          setSubmitting(false);
+        }
+      })();
     } else {
       // mode === 'buy' (Resale)
       if (availableStock <= 0) {
@@ -248,33 +302,46 @@ Please confirm availability and share payment instructions.`;
 
 Please confirm availability and share the payment QR code and payment instructions.`;
 
-      // Log payment tracking record as customer enquiry initiation
+      // 1. FAST REDIRECT: Open WhatsApp IMMEDIATELY
+      const encoded = encodeURIComponent(messageText);
+      const waUrl = `https://wa.me/${cleanPhone}?text=${encoded}`;
+      window.open(waUrl, "_blank", "noopener,noreferrer");
+      setWhatsappNotice(true);
+
+      // 2. Add to Cart & Create Payment enquiry in background
       setSubmitting(true);
-      try {
-        await paymentApi.create({
-          customerReference: refCode,
-          productId: prodId,
-          productName: product.name,
-          transactionType: "BUY",
-          size: selectedSize,
-          quantity,
-          expectedAmount: totalBuyAmount,
-          totalAmount: totalBuyAmount,
-          status: "Enquiry Initiated"
-        });
-      } catch (err) {
-        console.warn("Payment tracking record log notice:", err.message);
-      } finally {
-        setSubmitting(false);
-      }
+      (async () => {
+        try {
+          try {
+            await orderApi.addToCart({
+              productId: prodId,
+              itemType: "BUY",
+              size: selectedSize,
+              quantity,
+              rentalAmount: totalBuyAmount
+            });
+          } catch (cErr) {
+            console.warn("Cart add notice:", cErr.message);
+          }
+
+          await paymentApi.create({
+            customerReference: refCode,
+            productId: prodId,
+            productName: product.name,
+            transactionType: "BUY",
+            size: selectedSize,
+            quantity,
+            expectedAmount: totalBuyAmount,
+            totalAmount: totalBuyAmount,
+            status: "Enquiry Initiated"
+          });
+        } catch (err) {
+          console.warn("Payment tracking record log notice:", err.message);
+        } finally {
+          setSubmitting(false);
+        }
+      })();
     }
-
-    // Build URL and open WhatsApp
-    const encoded = encodeURIComponent(messageText);
-    const waUrl = `https://wa.me/${cleanPhone}?text=${encoded}`;
-
-    setWhatsappNotice(true);
-    window.open(waUrl, "_blank", "noopener,noreferrer");
   }
 
   return (
@@ -562,15 +629,15 @@ Please confirm availability and share the payment QR code and payment instructio
                   {product.available === false
                     ? "Currently Unavailable"
                     : mode === "rent"
-                    ? "Rent Now"
+                    ? "Rent Now (Add to Cart & WhatsApp)"
                     : availableStock <= 0
                     ? "Out of Stock"
-                    : "Buy Now"}
+                    : "Buy Now (Add to Cart & WhatsApp)"}
                 </span>
               </button>
 
               <p className="text-center text-3xs text-cm-muted leading-relaxed">
-                Opens WhatsApp with prefilled order details. You will send the message manually, and the administrator will share payment instructions.
+                Adds outfit to your cart and instantly opens WhatsApp. Admin will receive your request to confirm payment and initiate your rental.
               </p>
             </form>
           </div>
@@ -579,10 +646,10 @@ Please confirm availability and share the payment QR code and payment instructio
           {whatsappNotice && (
             <div className="rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800 border border-emerald-200 space-y-1">
               <p className="font-bold flex items-center gap-1.5">
-                <Check size={14} className="text-emerald-700" /> WhatsApp Opened
+                <Check size={14} className="text-emerald-700" /> Added to Cart & WhatsApp Opened
               </p>
               <p className="text-2xs">
-                Please click <strong>Send</strong> in WhatsApp. The administrator will reply to confirm your reservation and share the payment QR code.
+                Outfit has been added to your cart and logged for Admin review. Please click <strong>Send</strong> in WhatsApp to coordinate payment and rent initiation!
               </p>
             </div>
           )}

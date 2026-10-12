@@ -5,6 +5,8 @@ import {
   cancelRental,
   confirmAdvance,
   confirmPaymentReceived,
+  initiateRent,
+  startRentPeriod,
   markProductReceived,
   getDashboard,
   listAdminRentals,
@@ -33,6 +35,12 @@ router.get("/dashboard", getDashboard);
 router.get("/rentals", listAdminRentals);
 router.patch("/rentals/:id/payment-received", confirmPaymentReceived);
 router.post("/rentals/:id/payment-received", confirmPaymentReceived);
+router.patch("/rentals/:id/payment-done", confirmPaymentReceived);
+router.post("/rentals/:id/payment-done", confirmPaymentReceived);
+router.patch("/rentals/:id/initiate-rent", initiateRent);
+router.post("/rentals/:id/initiate-rent", initiateRent);
+router.patch("/rentals/:id/start-period", startRentPeriod);
+router.post("/rentals/:id/start-period", startRentPeriod);
 router.patch("/rentals/:id/advance", confirmAdvance);
 router.post("/rentals/:id/advance", confirmAdvance);
 router.post("/rentals/:id/handover-inspection", recordHandoverInspection);
@@ -43,6 +51,8 @@ router.post("/rentals/:id/damage", reportDamage);
 router.patch("/rentals/:id/damage/resolve", resolveDamage);
 router.patch("/rentals/:id/product-received", markProductReceived);
 router.post("/rentals/:id/product-received", markProductReceived);
+router.patch("/rentals/:id/rent-received", markProductReceived);
+router.post("/rentals/:id/rent-received", markProductReceived);
 router.patch("/rentals/:id/complete", completeRental);
 router.patch("/rentals/:id/cancel", cancelRental);
 router.post("/rentals/:id/cancel", cancelRental);

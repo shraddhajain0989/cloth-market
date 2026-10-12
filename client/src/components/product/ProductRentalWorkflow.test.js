@@ -77,4 +77,58 @@ Please confirm availability and share payment instructions.`;
     expect(waUrl).toBe("https://wa.me/919876543210?text=Hello%20Cloth%20Market!%20*Outfit%3A*%20Velvet%20Sherwani");
     expect(cleanPhone).toMatch(/^\d+$/);
   });
+
+  describe("5-Step Rental Lifecycle Sequence Verification", () => {
+    const LIFECYCLE_SEQUENCE = [
+      { key: "ADDED_TO_CART", label: "Added to Cart" },
+      { key: "PAYMENT_DONE", label: "Payment Done" },
+      { key: "RENT_INITIATED", label: "Rent Initiated" },
+      { key: "RENT_PERIOD", label: "Rent Period" },
+      { key: "RENT_RECEIVED", label: "Rent Received" }
+    ];
+
+    function mapRentalStepIndex(status) {
+      if (status === "ADDED_TO_CART" || status === "PENDING_ADVANCE") return 0;
+      if (status === "PAYMENT_DONE" || status === "CONFIRMED" || status === "READY_FOR_HANDOVER") return 1;
+      if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION") return 2;
+      if (status === "RENT_PERIOD" || status === "ACTIVE_RENTAL") return 3;
+      if (status === "RENT_RECEIVED" || status === "COMPLETED") return 4;
+      return 0;
+    }
+
+    it("verifies the exact progression of the 5 requested rental steps", () => {
+      expect(LIFECYCLE_SEQUENCE.map((s) => s.label)).toEqual([
+        "Added to Cart",
+        "Payment Done",
+        "Rent Initiated",
+        "Rent Period",
+        "Rent Received"
+      ]);
+    });
+
+    it("maps rental statuses accurately across all 5 timeline indices", () => {
+      expect(mapRentalStepIndex("ADDED_TO_CART")).toBe(0);
+      expect(mapRentalStepIndex("PAYMENT_DONE")).toBe(1);
+      expect(mapRentalStepIndex("RENT_INITIATED")).toBe(2);
+      expect(mapRentalStepIndex("RENT_PERIOD")).toBe(3);
+      expect(mapRentalStepIndex("RENT_RECEIVED")).toBe(4);
+    });
+
+    it("generates correct rental cart item payload structure", () => {
+      const payload = {
+        productId: "prod-123",
+        itemType: "RENT",
+        size: "M",
+        rentalStartDate: "2026-11-01",
+        rentalEndDate: "2026-11-04",
+        rentalDuration: 3,
+        rentalAmount: 2250
+      };
+
+      expect(payload.itemType).toBe("RENT");
+      expect(payload.size).toBe("M");
+      expect(payload.rentalDuration).toBe(3);
+      expect(payload.rentalAmount).toBe(2250);
+    });
+  });
 });

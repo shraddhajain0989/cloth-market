@@ -19,7 +19,14 @@ const cartItemSchema = new mongoose.Schema(
     name: String,
     price: Number,
     image: String,
-    quantity: { type: Number, default: 1 }
+    quantity: { type: Number, default: 1 },
+    itemType: { type: String, enum: ["RENT", "BUY"], default: "RENT" },
+    size: { type: String, default: "M" },
+    rentalStartDate: String,
+    rentalEndDate: String,
+    rentalDuration: { type: Number, default: 1 },
+    rentalAmount: Number,
+    rentalId: String
   },
   { _id: false }
 );

@@ -23,7 +23,6 @@ export default function ImageUpload({ value = [], onChange, disabled = false }) 
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState("");
   const [error, setError] = useState("");
-  const [urlInput, setUrlInput] = useState("");
   const [draggedIndex, setDraggedIndex] = useState(null);
   const inputRef = useRef(null);
 
@@ -147,24 +146,6 @@ export default function ImageUpload({ value = [], onChange, disabled = false }) 
 
   function handleDragEnd() {
     setDraggedIndex(null);
-  }
-
-  // Add image from manual URL
-  function handleAddUrl(e) {
-    e.preventDefault();
-    const trimmed = urlInput.trim();
-    if (!trimmed) return;
-    if (trimmed.startsWith("blob:")) {
-      setError("Temporary browser blob URLs cannot be used. Please provide a permanent HTTP/HTTPS URL.");
-      return;
-    }
-    if (isAtLimit) {
-      setError(`Cannot add more than ${MAX_IMAGES} images.`);
-      return;
-    }
-    onChange([...images, trimmed]);
-    setUrlInput("");
-    setError("");
   }
 
   return (
@@ -362,31 +343,6 @@ export default function ImageUpload({ value = [], onChange, disabled = false }) 
           <div className="flex items-start gap-2 rounded-xl bg-red-50 p-3 text-xs text-red-700 border border-red-200">
             <AlertCircle size={15} className="shrink-0 mt-0.5 text-red-600" />
             <span>{error}</span>
-          </div>
-        )}
-
-        {/* Fallback to add image URL */}
-        {!isAtLimit && (
-          <div className="flex items-center gap-2 pt-1">
-            <div className="relative flex-1">
-              <ImageIcon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="url"
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="Or paste an image URL directly"
-                disabled={uploading || disabled}
-                className="w-full rounded-xl border border-cm-border bg-white pl-9 pr-3 py-2 text-xs focus:border-cm-black focus:ring-0"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={handleAddUrl}
-              disabled={!urlInput.trim() || disabled}
-              className="rounded-xl border border-cm-border bg-white px-3.5 py-2 text-xs font-semibold text-cm-black hover:bg-slate-100 disabled:opacity-40"
-            >
-              Add URL
-            </button>
           </div>
         )}
       </div>

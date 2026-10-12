@@ -12,35 +12,37 @@ import {
 import { rentalApi, userApi } from "../../api/endpoints";
 
 const TIMELINE_STEPS = [
-  { key: "PENDING_ADVANCE", label: "Booking Created" },
-  { key: "CONFIRMED", label: "Payment Confirmed" },
-  { key: "HANDOVER_INSPECTION", label: "Handover" },
-  { key: "ACTIVE_RENTAL", label: "Rental Active" },
-  { key: "RETURN_INSPECTION", label: "Return" },
-  { key: "COMPLETED", label: "Completed" }
+  { key: "ADDED_TO_CART", label: "Added to Cart" },
+  { key: "PAYMENT_DONE", label: "Payment Done" },
+  { key: "RENT_INITIATED", label: "Rent Initiated" },
+  { key: "RENT_PERIOD", label: "Rent Period" },
+  { key: "RENT_RECEIVED", label: "Rent Received" }
 ];
 
 function getTimelineIndex(status) {
-  if (status === "PENDING_ADVANCE") return 0;
-  if (status === "CONFIRMED" || status === "READY_FOR_HANDOVER") return 1;
-  if (status === "HANDOVER_INSPECTION") return 2;
-  if (status === "ACTIVE_RENTAL" || status === "EXTENSION_REQUESTED" || status === "EXTENDED") return 3;
-  if (status === "RETURN_INSPECTION" || status === "DAMAGE_REPORTED") return 4;
-  if (status === "COMPLETED") return 5;
+  if (status === "ADDED_TO_CART" || status === "PENDING_ADVANCE") return 0;
+  if (status === "PAYMENT_DONE" || status === "CONFIRMED" || status === "READY_FOR_HANDOVER") return 1;
+  if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION") return 2;
+  if (status === "RENT_PERIOD" || status === "ACTIVE_RENTAL" || status === "EXTENSION_REQUESTED" || status === "EXTENDED") return 3;
+  if (status === "RENT_RECEIVED" || status === "COMPLETED" || status === "RETURN_INSPECTION" || status === "DAMAGE_REPORTED" || status === "DAMAGE_SETTLEMENT") return 4;
   return 0;
 }
 
 function getHumanStatus(status) {
   switch (status) {
+    case "ADDED_TO_CART":
     case "PENDING_ADVANCE":
-      return "Booking Created";
+      return "Added to Cart";
+    case "PAYMENT_DONE":
     case "CONFIRMED":
     case "READY_FOR_HANDOVER":
-      return "Payment Confirmed";
+      return "Payment Done";
+    case "RENT_INITIATED":
     case "HANDOVER_INSPECTION":
-      return "Handover Inspection";
+      return "Rent Initiated";
+    case "RENT_PERIOD":
     case "ACTIVE_RENTAL":
-      return "Rental Active";
+      return "Rent Period (Active)";
     case "EXTENSION_REQUESTED":
       return "Extension Requested";
     case "EXTENDED":
@@ -49,8 +51,9 @@ function getHumanStatus(status) {
       return "Return Inspection";
     case "DAMAGE_REPORTED":
       return "Damage Reported";
+    case "RENT_RECEIVED":
     case "COMPLETED":
-      return "Completed";
+      return "Rent Received";
     case "CANCELLED":
       return "Cancelled";
     default:
@@ -238,12 +241,12 @@ export default function ProfilePage() {
                   </div>
                 )}
 
-                {/* 6-Step Rental Lifecycle Timeline */}
+                {/* 5-Step Rental Lifecycle Timeline */}
                 <div>
                   <p className="text-2xs font-bold uppercase tracking-wider text-cm-muted mb-2.5">
-                    Rental Timeline
+                    Rental Timeline (5-Step Fulfillment)
                   </p>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
                     {TIMELINE_STEPS.map((step, idx) => {
                       const isDone = idx <= stepIdx;
                       const isCurrent = idx === stepIdx;
@@ -268,6 +271,29 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
+                {/* Current Stage Guidance */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <span className="text-3xs uppercase font-bold text-slate-500 block">Current Status</span>
+                    <p className="font-bold text-cm-black text-xs">
+                      {stepIdx === 0 && "1. Added to Cart • Waiting for WhatsApp rent confirmation with Admin"}
+                      {stepIdx === 1 && "2. Payment Done • Payment received! Admin is prepping your outfit"}
+                      {stepIdx === 2 && "3. Rent Initiated • Outfit ready for pickup/delivery"}
+                      {stepIdx === 3 && "4. Rent Period • Active rental in progress! Enjoy wearing your outfit"}
+                      {stepIdx === 4 && "5. Rent Received • Outfit returned back to Admin. Rental complete"}
+                    </p>
+                  </div>
+                  <span className={`text-2xs font-bold px-2.5 py-1 rounded-xl self-start sm:self-center ${
+                    stepIdx === 0
+                      ? "bg-amber-100 text-amber-800"
+                      : stepIdx === 4
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-blue-100 text-blue-800"
+                  }`}>
+                    {stepIdx === 0 ? "Awaiting Confirmation" : stepIdx === 4 ? "Completed" : "In Progress"}
+                  </span>
+                </div>
+
                 {/* Payment Breakdown Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div className="p-3 rounded-xl bg-cm-soft/50 border border-cm-border space-y-0.5">
@@ -275,10 +301,10 @@ export default function ProfilePage() {
                       Payment Status
                     </span>
                     <p className="font-bold text-cm-black">
-                      {hasAdvance ? "✓ Paid / Confirmed" : "⏳ Pending Confirmation"}
+                      {hasAdvance ? "✓ Payment Done (Confirmed)" : "⏳ Added to Cart (Pending WhatsApp Confirmation)"}
                     </p>
                     <p className="text-2xs text-cm-muted">
-                      {hasAdvance ? "Confirmed by Admin" : "Coordinated via WhatsApp / Admin"}
+                      {hasAdvance ? "Confirmed by Admin" : "Coordinated via WhatsApp with Admin"}
                     </p>
                   </div>
 

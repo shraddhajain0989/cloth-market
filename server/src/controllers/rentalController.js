@@ -202,13 +202,13 @@ export async function createRental(req, res) {
     remainingAmount,
     remainingPaymentStatus: "REMAINING_RECEIVED",
     paymentMethod: "MANUAL_WHATSAPP",
-    rentalStatus: "PENDING_ADVANCE",
+    rentalStatus: req.body.rentalStatus || "ADDED_TO_CART",
     // Backward compatibility aliases
     durationDays,
     total: totalRentalAmount,
     pickupDate: pickupStr,
     returnDate: returnStr,
-    status: "PENDING_ADVANCE"
+    status: req.body.rentalStatus || "ADDED_TO_CART"
   });
 
   await logAction({
