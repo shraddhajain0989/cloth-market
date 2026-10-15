@@ -3,8 +3,11 @@ import { Rental } from "../models/Rental.js";
 
 export const OPERATIONAL_RENTAL_STATUSES = [
   "CONFIRMED",
+  "PAYMENT_DONE",
+  "RENT_INITIATED",
   "READY_FOR_HANDOVER",
   "HANDOVER_INSPECTION",
+  "RENT_PERIOD",
   "ACTIVE_RENTAL",
   "EXTENSION_REQUESTED",
   "EXTENDED",
@@ -50,8 +53,21 @@ export async function reconcileLegacyRentals(product) {
 
     if (!size || !startDate || !endDate) continue;
 
-    const variant = product.sizeVariants?.find((v) => v.size === size);
-    const sizeStock = variant ? variant.stock : product.stock || 1;
+    const trimmedSize = String(size || "").trim();
+    const variant = product.sizeVariants?.find(
+      (v) => String(v.size).trim().toUpperCase() === trimmedSize.toUpperCase()
+    );
+    let sizeStock = 0;
+    if (variant) {
+      sizeStock = Number(variant.stock) || 0;
+    } else if (product.sizes?.some((s) => String(s).trim().toUpperCase() === trimmedSize.toUpperCase())) {
+      sizeStock = Number(product.stock) || 0;
+    } else if (!product.sizeVariants?.length && !product.sizes?.length) {
+      sizeStock = Number(product.stock) || 0;
+    }
+
+    if (sizeStock <= 0) continue;
+    const canonicalSize = variant ? variant.size : size;
 
     // Atomically find an available unit slot (1 through sizeStock)
     for (let unit = 1; unit <= sizeStock; unit++) {
@@ -62,7 +78,7 @@ export async function reconcileLegacyRentals(product) {
           activeRentals: {
             $not: {
               $elemMatch: {
-                size,
+                size: canonicalSize,
                 unitIndex: unit,
                 startDate: { $lte: endDate },
                 endDate: { $gte: startDate }
@@ -74,7 +90,7 @@ export async function reconcileLegacyRentals(product) {
           $push: {
             activeRentals: {
               rentalId: legacyIdStr,
-              size,
+              size: canonicalSize,
               unitIndex: unit,
               startDate,
               endDate
@@ -104,18 +120,29 @@ export async function reserveRentalSlot(firstArg, secondArg) {
   const rental = (secondArg && (secondArg.clothId || secondArg.rentalStartDate || secondArg.pickupDate)) ? secondArg : firstArg;
   const clothId = rental.clothId || rental.productId || (firstArg?._id && secondArg ? firstArg._id : null);
   const product = await Product.findById(clothId);
-  if (!product || product.available === false) {
-    throw new Error("This cloth product is no longer active in the catalog.");
+  if (!product) {
+    throw new Error("This cloth product was not found in the catalog.");
   }
 
-  const variant = product.sizeVariants?.find((v) => v.size === rental.size);
-  const sizeStock = variant ? variant.stock : product.stock || 1;
+  const trimmedSize = String(rental.size || "").trim();
+  const variant = product.sizeVariants?.find(
+    (v) => String(v.size).trim().toUpperCase() === trimmedSize.toUpperCase()
+  );
+  let sizeStock = 0;
+  if (variant) {
+    sizeStock = Number(variant.stock) || 0;
+  } else if (product.sizes?.some((s) => String(s).trim().toUpperCase() === trimmedSize.toUpperCase())) {
+    sizeStock = Number(product.stock) || 0;
+  } else if (!product.sizeVariants?.length && !product.sizes?.length) {
+    sizeStock = Number(product.stock) || 0;
+  }
+
   if (sizeStock <= 0) {
     throw new Error(`Size '${rental.size}' is currently out of stock.`);
   }
 
-  const pickupDate = rental.rentalStartDate || rental.pickupDate;
-  const returnDate = rental.currentEndDate || rental.rentalEndDate || rental.returnDate;
+  const pickupDate = String(rental.rentalStartDate || rental.pickupDate || "").slice(0, 10);
+  const returnDate = String(rental.currentEndDate || rental.rentalEndDate || rental.returnDate || "").slice(0, 10);
 
   if (!pickupDate || !returnDate) {
     throw new Error("Rental start date and return date are required.");
@@ -138,7 +165,7 @@ export async function reserveRentalSlot(firstArg, secondArg) {
   if (existingReservation) {
     // If exact match on size, startDate, and endDate:
     if (
-      existingReservation.size === rental.size &&
+      String(existingReservation.size).trim().toUpperCase() === trimmedSize.toUpperCase() &&
       existingReservation.startDate === pickupDate &&
       existingReservation.endDate === returnDate
     ) {
@@ -149,21 +176,28 @@ export async function reserveRentalSlot(firstArg, secondArg) {
     if (existingReservation.endDate !== returnDate || existingReservation.startDate !== pickupDate) {
       return await extendRentalSlot(rental, returnDate);
     }
+
+    // Dates match, size differed: update size on existing reservation
+    await Product.updateOne(
+      { _id: product._id, "activeRentals.rentalId": rentalIdStr },
+      { $set: { "activeRentals.$.size": rental.size } }
+    );
+    return { success: true, alreadyReserved: true, unitIndex: existingReservation.unitIndex };
   }
 
   // ATOMIC RESERVATION LOOP:
   // Try assigning each available physical unit index (1 through sizeStock).
   let assignedUnit = null;
+  const canonicalSize = variant ? variant.size : rental.size;
   for (let unit = 1; unit <= sizeStock; unit++) {
     const updated = await Product.findOneAndUpdate(
       {
         _id: product._id,
-        available: true,
         "activeRentals.rentalId": { $ne: rentalIdStr },
         activeRentals: {
           $not: {
             $elemMatch: {
-              size: rental.size,
+              size: canonicalSize,
               unitIndex: unit,
               startDate: { $lte: returnDate },
               endDate: { $gte: pickupDate }
@@ -175,7 +209,7 @@ export async function reserveRentalSlot(firstArg, secondArg) {
         $push: {
           activeRentals: {
             rentalId: rentalIdStr,
-            size: rental.size,
+            size: canonicalSize,
             unitIndex: unit,
             startDate: pickupDate,
             endDate: returnDate
@@ -219,19 +253,30 @@ export async function reserveRentalSlot(firstArg, secondArg) {
 export async function extendRentalSlot(rental, requestedEndDate) {
   const clothId = rental.clothId || rental.productId;
   const product = await Product.findById(clothId);
-  if (!product || product.available === false) {
-    throw new Error("This cloth product is no longer active in the catalog.");
+  if (!product) {
+    throw new Error("This cloth product was not found in the catalog.");
   }
 
-  const variant = product.sizeVariants?.find((v) => v.size === rental.size);
-  const sizeStock = variant ? variant.stock : product.stock || 1;
+  const trimmedSize = String(rental.size || "").trim();
+  const variant = product.sizeVariants?.find(
+    (v) => String(v.size).trim().toUpperCase() === trimmedSize.toUpperCase()
+  );
+  let sizeStock = 0;
+  if (variant) {
+    sizeStock = Number(variant.stock) || 0;
+  } else if (product.sizes?.some((s) => String(s).trim().toUpperCase() === trimmedSize.toUpperCase())) {
+    sizeStock = Number(product.stock) || 0;
+  } else if (!product.sizeVariants?.length && !product.sizes?.length) {
+    sizeStock = Number(product.stock) || 0;
+  }
+
   if (sizeStock <= 0) {
     throw new Error(`Size '${rental.size}' is currently out of stock.`);
   }
 
   const rentalIdStr = String(rental._id || rental.id);
-  const pickupDate = rental.rentalStartDate || rental.pickupDate;
-  const currentEndDate = rental.currentEndDate || rental.rentalEndDate || rental.returnDate;
+  const pickupDate = String(rental.rentalStartDate || rental.pickupDate || "").slice(0, 10);
+  const currentEndDate = String(rental.currentEndDate || rental.rentalEndDate || rental.returnDate || "").slice(0, 10);
 
   if (!requestedEndDate || new Date(requestedEndDate) <= new Date(pickupDate)) {
     throw new Error("Extended return date must be after rental start date.");
@@ -250,13 +295,14 @@ export async function extendRentalSlot(rental, requestedEndDate) {
     return { success: true, alreadyExtended: true, unitIndex: existingReservation.unitIndex };
   }
 
+  const canonicalSize = variant ? variant.size : rental.size;
+
   // Case 1: Existing reservation exists -> attempt to extend on the SAME unitIndex
   if (existingReservation) {
     const assignedUnit = existingReservation.unitIndex;
     const updatedSameUnit = await Product.findOneAndUpdate(
       {
         _id: product._id,
-        available: true,
         activeRentals: {
           $elemMatch: {
             rentalId: rentalIdStr,
@@ -265,7 +311,7 @@ export async function extendRentalSlot(rental, requestedEndDate) {
           $not: {
             $elemMatch: {
               rentalId: { $ne: rentalIdStr },
-              size: rental.size,
+              size: canonicalSize,
               unitIndex: assignedUnit,
               startDate: { $lte: requestedEndDate },
               endDate: { $gte: existingReservation.endDate }
@@ -295,7 +341,6 @@ export async function extendRentalSlot(rental, requestedEndDate) {
       const remapped = await Product.findOneAndUpdate(
         {
           _id: product._id,
-          available: true,
           activeRentals: {
             $elemMatch: {
               rentalId: rentalIdStr
@@ -303,7 +348,7 @@ export async function extendRentalSlot(rental, requestedEndDate) {
             $not: {
               $elemMatch: {
                 rentalId: { $ne: rentalIdStr },
-                size: rental.size,
+                size: canonicalSize,
                 unitIndex: unit,
                 startDate: { $lte: requestedEndDate },
                 endDate: { $gte: pickupDate }
@@ -340,12 +385,11 @@ export async function extendRentalSlot(rental, requestedEndDate) {
     const assigned = await Product.findOneAndUpdate(
       {
         _id: product._id,
-        available: true,
         "activeRentals.rentalId": { $ne: rentalIdStr },
         activeRentals: {
           $not: {
             $elemMatch: {
-              size: rental.size,
+              size: canonicalSize,
               unitIndex: unit,
               startDate: { $lte: requestedEndDate },
               endDate: { $gte: pickupDate }
@@ -357,7 +401,7 @@ export async function extendRentalSlot(rental, requestedEndDate) {
         $push: {
           activeRentals: {
             rentalId: rentalIdStr,
-            size: rental.size,
+            size: canonicalSize,
             unitIndex: unit,
             startDate: pickupDate,
             endDate: requestedEndDate

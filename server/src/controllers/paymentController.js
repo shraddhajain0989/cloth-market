@@ -382,13 +382,10 @@ export async function verifyPayment(req, res) {
   if (payment.status === "Cancelled") {
     return fail(res, 400, "Cannot verify a cancelled payment record.");
   }
-  if (payment.status === "Rejected") {
-    return fail(res, 400, "Cannot verify a rejected payment record.");
-  }
 
   const adminName = req.user?.name || req.user?.email || "Admin";
 
-  // If this payment is linked to a Rental (or matches a rental), confirm the rental advance first
+  // If this payment is linked to a Rental (or matches an unconfirmed rental), confirm the rental advance first
   let rentalConfirmedHere = false;
   let linkedRental = null;
   let initialAdvanceStatus = null;
@@ -396,30 +393,79 @@ export async function verifyPayment(req, res) {
 
   if (payment.rentalId) {
     linkedRental = await Rental.findById(payment.rentalId);
-    if (linkedRental && linkedRental.advanceStatus !== "ADVANCE_RECEIVED") {
-      initialAdvanceStatus = linkedRental.advanceStatus;
-      initialRentalStatus = linkedRental.rentalStatus;
-      try {
-        await reserveRentalSlot(linkedRental);
-        linkedRental.advanceStatus = "ADVANCE_RECEIVED";
-        linkedRental.remainingAmount = 0;
-        linkedRental.remainingPaymentStatus = "REMAINING_RECEIVED";
-        linkedRental.rentalStatus = "CONFIRMED";
-        await linkedRental.save();
-        rentalConfirmedHere = true;
-      } catch (err) {
-        return fail(res, 400, `Verification failed: ${err.message}`);
+    if (linkedRental) {
+      const prodMatch = String(linkedRental.clothId) === String(payment.productId) || String(linkedRental.productId) === String(payment.productId);
+      const userMatch = !payment.customerId || String(linkedRental.userId) === String(payment.customerId);
+      if (!prodMatch || !userMatch) {
+        linkedRental = null;
       }
+    }
+  }
+  if (!linkedRental && payment.transactionType === "RENT" && payment.customerId && payment.productId && payment.size) {
+    const andConditions = [
+      { $or: [{ clothId: payment.productId }, { productId: payment.productId }] },
+      { userId: payment.customerId },
+      { size: { $regex: new RegExp(`^${payment.size.trim()}$`, "i") } },
+      { rentalStatus: { $nin: ["CANCELLED", "COMPLETED"] } }
+    ];
+    if (payment.rentalStartDate) {
+      andConditions.push({
+        $or: [{ rentalStartDate: payment.rentalStartDate }, { pickupDate: payment.rentalStartDate }]
+      });
+    }
+    if (payment.rentalEndDate) {
+      andConditions.push({
+        $or: [
+          { currentEndDate: payment.rentalEndDate },
+          { rentalEndDate: payment.rentalEndDate },
+          { returnDate: payment.rentalEndDate },
+          { originalEndDate: payment.rentalEndDate }
+        ]
+      });
+    }
+    linkedRental = await Rental.findOne({ $and: andConditions }).sort({ createdAt: -1 });
+
+    if (linkedRental) {
+      payment.rentalId = String(linkedRental._id);
+      await Payment.updateOne({ _id: payment._id }, { $set: { rentalId: String(linkedRental._id) } });
+    }
+  }
+
+  if (linkedRental && !["CONFIRMED", "PAYMENT_DONE", "RENT_INITIATED", "RENT_PERIOD", "RENT_RECEIVED"].includes(linkedRental.rentalStatus)) {
+    initialAdvanceStatus = linkedRental.advanceStatus;
+    initialRentalStatus = linkedRental.rentalStatus;
+
+    // Ensure dates and IDs are populated from payment if missing in linkedRental
+    if (!linkedRental.rentalStartDate && payment.rentalStartDate) linkedRental.rentalStartDate = payment.rentalStartDate;
+    if (!linkedRental.pickupDate && payment.rentalStartDate) linkedRental.pickupDate = payment.rentalStartDate;
+    if (!linkedRental.currentEndDate && payment.rentalEndDate) linkedRental.currentEndDate = payment.rentalEndDate;
+    if (!linkedRental.rentalEndDate && payment.rentalEndDate) linkedRental.rentalEndDate = payment.rentalEndDate;
+    if (!linkedRental.returnDate && payment.rentalEndDate) linkedRental.returnDate = payment.rentalEndDate;
+    if (!linkedRental.clothId && payment.productId) linkedRental.clothId = payment.productId;
+    if (!linkedRental.productId && payment.productId) linkedRental.productId = payment.productId;
+    if (!linkedRental.size && payment.size) linkedRental.size = payment.size;
+
+    try {
+      await reserveRentalSlot(linkedRental);
+      linkedRental.advanceStatus = "ADVANCE_RECEIVED";
+      linkedRental.remainingAmount = 0;
+      linkedRental.remainingPaymentStatus = "REMAINING_RECEIVED";
+      linkedRental.rentalStatus = "CONFIRMED";
+      await linkedRental.save();
+      rentalConfirmedHere = true;
+    } catch (err) {
+      return fail(res, 400, `Verification failed: ${err.message}`);
     }
   }
 
   const updatedPayment = await Payment.findOneAndUpdate(
-    { _id: id, status: { $nin: ["Verified", "Cancelled", "Rejected"] } },
+    { _id: id, status: { $nin: ["Verified", "Cancelled"] } },
     {
       $set: {
         status: "Verified",
         verifiedBy: adminName,
         verifiedAt: new Date(),
+        rejectionReason: "",
         ...(transactionReference ? { transactionReference: String(transactionReference).trim() } : {}),
         ...(notes ? { adminNotes: payment.adminNotes ? `${payment.adminNotes} | ${notes}` : String(notes) } : {})
       }
@@ -471,7 +517,7 @@ export async function verifyPayment(req, res) {
     return fail(
       res,
       400,
-      `Payment record cannot be verified (invalid state, rejected, or cancelled).${compError ? ` (${compError})` : ""}`
+      `Payment record cannot be verified (invalid state or cancelled).${compError ? ` (${compError})` : ""}`
     );
   }
 

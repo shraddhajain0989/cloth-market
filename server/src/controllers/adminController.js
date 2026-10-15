@@ -91,8 +91,11 @@ export async function confirmPaymentReceived(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
-  if (rental.advanceStatus === "ADVANCE_RECEIVED" || rental.rentalStatus === "CONFIRMED") {
-    return fail(res, 400, "Payment has already been recorded as received.");
+  if (
+    rental.advanceStatus === "ADVANCE_RECEIVED" &&
+    ["CONFIRMED", "PAYMENT_DONE", "RENT_INITIATED", "RENT_PERIOD", "RENT_RECEIVED"].includes(rental.rentalStatus)
+  ) {
+    return ok(res, rental, "Payment has already been recorded as received.");
   }
 
   if (rental.rentalStatus === "CANCELLED") {
@@ -110,11 +113,12 @@ export async function confirmPaymentReceived(req, res) {
 
   // Atomically update rental status
   const updatedRental = await Rental.findOneAndUpdate(
-    { _id: rental._id, advanceStatus: { $ne: "ADVANCE_RECEIVED" }, rentalStatus: { $nin: ["CANCELLED", "COMPLETED"] } },
+    { _id: rental._id, rentalStatus: { $nin: ["CANCELLED", "COMPLETED"] } },
     {
       $set: {
         advanceStatus: "ADVANCE_RECEIVED",
         rentalStatus: "CONFIRMED",
+        status: "CONFIRMED",
         remainingAmount: 0,
         remainingPaymentStatus: "REMAINING_RECEIVED"
       }
@@ -125,20 +129,39 @@ export async function confirmPaymentReceived(req, res) {
   if (!updatedRental) {
     const recheck = await Rental.findById(rental._id);
     if (recheck?.advanceStatus === "ADVANCE_RECEIVED") {
-      return fail(res, 400, "Payment has already been recorded as received.");
+      return ok(res, recheck, "Payment has already been recorded as received.");
     }
     await releaseRentalSlot(rental.clothId, rental._id);
     return fail(res, 400, "Rental status could not be updated.");
   }
 
-  // Also update linked Payment if exists
+  // Also update linked Payment if exists (including previously rejected payment records)
+  const sizeRegex = updatedRental.size ? new RegExp(`^${String(updatedRental.size).trim()}$`, "i") : null;
+  const prodId = String(updatedRental.clothId || updatedRental.productId);
+  const custId = String(updatedRental.userId);
+
   await Payment.updateMany(
-    { rentalId: String(updatedRental._id), status: { $nin: ["Verified", "Cancelled", "Rejected"] } },
+    {
+      $or: [
+        { rentalId: String(updatedRental._id) },
+        {
+          $and: [
+            { $or: [{ rentalId: { $exists: false } }, { rentalId: null }, { rentalId: "" }] },
+            { $or: [{ productId: prodId }, { clothId: prodId }] },
+            { customerId: custId },
+            ...(sizeRegex ? [{ size: { $regex: sizeRegex } }] : [])
+          ]
+        }
+      ],
+      status: { $nin: ["Verified", "Cancelled"] }
+    },
     {
       $set: {
+        rentalId: String(updatedRental._id),
         status: "Verified",
         verifiedBy: req.user?.name || req.user?.email || "Admin",
-        verifiedAt: new Date()
+        verifiedAt: new Date(),
+        rejectionReason: ""
       }
     }
   );
@@ -165,10 +188,25 @@ export async function recordHandoverInspection(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
-  if (rental.advanceStatus !== "ADVANCE_RECEIVED") {
-    return fail(res, 400, "Cannot perform handover inspection before confirmation advance is received.");
+  if (["CANCELLED", "COMPLETED"].includes(rental.rentalStatus)) {
+    return fail(res, 400, `Cannot perform handover inspection for '${rental.rentalStatus}' rental.`);
   }
 
+  const ALLOWED_HANDOVER_STATUSES = [
+    "CONFIRMED",
+    "PAYMENT_DONE",
+    "RENT_INITIATED",
+    "READY_FOR_HANDOVER",
+    "HANDOVER_INSPECTION",
+    "RENT_PERIOD",
+    "ACTIVE_RENTAL"
+  ];
+  const isPaid = rental.advanceStatus === "ADVANCE_RECEIVED" || ALLOWED_HANDOVER_STATUSES.includes(rental.rentalStatus);
+  if (!isPaid) {
+    return fail(res, 400, "Cannot perform handover inspection before payment is confirmed.");
+  }
+
+  rental.advanceStatus = "ADVANCE_RECEIVED";
   rental.handoverInspection = {
     condition: condition || "Good",
     stains: Boolean(stains),
@@ -179,12 +217,15 @@ export async function recordHandoverInspection(req, res) {
     missingAccessories: Boolean(missingAccessories),
     notes: notes || "",
     photos: Array.isArray(photos) ? photos : [],
-    inspectedBy: req.user.name || "Admin",
+    inspectedBy: req.user?.name || req.user?.email || "Admin",
     inspectedAt: new Date(),
     customerAcknowledged: false
   };
 
-  rental.rentalStatus = "HANDOVER_INSPECTION";
+  if (!["RENT_PERIOD", "ACTIVE_RENTAL"].includes(rental.rentalStatus)) {
+    rental.rentalStatus = "HANDOVER_INSPECTION";
+    rental.status = "HANDOVER_INSPECTION";
+  }
   await rental.save();
 
   await logAction({
@@ -271,6 +312,10 @@ export async function startRentPeriod(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
+  if (["CANCELLED", "COMPLETED"].includes(rental.rentalStatus)) {
+    return fail(res, 400, `Cannot start rent period for rental in '${rental.rentalStatus}' state.`);
+  }
+
   const validPrior = [
     "RENT_INITIATED",
     "PAYMENT_DONE",
@@ -278,12 +323,13 @@ export async function startRentPeriod(req, res) {
     "HANDOVER_INSPECTION",
     "READY_FOR_HANDOVER"
   ];
-  if (!validPrior.includes(rental.rentalStatus) && rental.advanceStatus !== "ADVANCE_RECEIVED") {
-    return fail(res, 400, "Cannot start rent period without payment confirmation and rent initiation.");
+  if (!validPrior.includes(rental.rentalStatus)) {
+    return fail(res, 400, `Cannot start rent period from '${rental.rentalStatus}' state. Payment must be confirmed and rent initiated.`);
   }
 
   rental.rentalStatus = "RENT_PERIOD";
   rental.status = "RENT_PERIOD";
+  rental.advanceStatus = "ADVANCE_RECEIVED";
   await rental.save();
 
   await logAction({
@@ -408,6 +454,10 @@ export async function reportDamage(req, res) {
   const rental = await Rental.findById(req.params.id);
   if (!rental) return fail(res, 404, "Rental not found.");
 
+  if (rental.rentalStatus === "CANCELLED") {
+    return fail(res, 400, "Cannot report damage for a cancelled rental.");
+  }
+
   rental.damageReport = {
     damageDetected: true,
     description: description || "Item damaged upon return",
@@ -416,10 +466,11 @@ export async function reportDamage(req, res) {
     photos: Array.isArray(photos) ? photos : [],
     status: "DAMAGE_REPORTED",
     reportedAt: new Date(),
-    reportedBy: req.user.name
+    reportedBy: req.user?.name || req.user?.email || "Admin"
   };
 
   rental.rentalStatus = "DAMAGE_REPORTED";
+  rental.status = "DAMAGE_REPORTED";
   await rental.save();
 
   await logAction({
@@ -446,7 +497,16 @@ export async function resolveDamage(req, res) {
   }
 
   rental.rentalStatus = "COMPLETED";
+  rental.status = "COMPLETED";
+  rental.productReceived = true;
+  rental.productReceivedAt = rental.productReceivedAt || new Date();
   await rental.save();
+
+  // Release reservation slot
+  const clothId = rental.clothId || rental.productId;
+  if (clothId) {
+    await releaseRentalSlot(clothId, rental._id);
+  }
 
   await logAction({
     actorId: req.user.id,
@@ -563,8 +623,11 @@ export { cancelRental } from "./rentalController.js";
 export const OPERATIONAL_RENTAL_STATUSES = [
   "PENDING_ADVANCE",
   "CONFIRMED",
+  "PAYMENT_DONE",
+  "RENT_INITIATED",
   "READY_FOR_HANDOVER",
   "HANDOVER_INSPECTION",
+  "RENT_PERIOD",
   "ACTIVE_RENTAL",
   "EXTENSION_REQUESTED",
   "EXTENDED",

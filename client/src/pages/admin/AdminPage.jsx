@@ -34,8 +34,8 @@ const ALL_SIZES = ["XS", "S", "M", "L", "XL", "XXL", "3XL"];
 
 export function normalizeRentalStatus(status) {
   if (status === "ADDED_TO_CART" || status === "PENDING_ADVANCE") return "ADDED_TO_CART";
-  if (status === "PAYMENT_DONE" || status === "CONFIRMED" || status === "READY_FOR_HANDOVER") return "PAYMENT_DONE";
-  if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION") return "RENT_INITIATED";
+  if (status === "PAYMENT_DONE" || status === "CONFIRMED") return "PAYMENT_DONE";
+  if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION" || status === "READY_FOR_HANDOVER") return "RENT_INITIATED";
   if (status === "RENT_PERIOD" || status === "ACTIVE_RENTAL" || status === "EXTENSION_REQUESTED" || status === "EXTENDED") return "RENT_PERIOD";
   if (status === "RENT_RECEIVED" || status === "COMPLETED" || status === "RETURN_INSPECTION" || status === "DAMAGE_REPORTED" || status === "DAMAGE_SETTLEMENT") return "RENT_RECEIVED";
   return status || "ADDED_TO_CART";
@@ -867,7 +867,14 @@ export default function AdminPage() {
                     }
                   };
 
-                  const currentMeta = STAGE_META[stage] || STAGE_META.ADDED_TO_CART;
+                  const isDamagePending = hasDamage && r.damageReport?.status !== "DAMAGE_RESOLVED";
+                  const currentMeta = isDamagePending
+                    ? {
+                        title: "⚠️ Damage Reported",
+                        badgeClass: "bg-red-100 text-red-900 border-red-300",
+                        helper: "Damage incident recorded. Settle repair amount and resolve to complete rental cycle."
+                      }
+                    : (STAGE_META[stage] || STAGE_META.ADDED_TO_CART);
 
                   return (
                     <div
@@ -954,14 +961,173 @@ export default function AdminPage() {
                         </div>
                       </div>
 
+                      {/* Handover Inspection Box */}
+                      {r.handoverInspection?.inspectedAt && (
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                              <Camera size={14} className="text-slate-600" />
+                              Handover Baseline Inspection
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-white border border-slate-200 text-slate-700">
+                                Condition: {r.handoverInspection.condition || "Good"}
+                              </span>
+                              {r.handoverInspection.customerAcknowledged || r.handoverAcknowledgedAt ? (
+                                <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                                  <Check size={10} /> Customer Confirmed
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                  Awaiting Customer Receipt
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Defect tags */}
+                          {(() => {
+                            const tags = [];
+                            if (r.handoverInspection.stains) tags.push("Stains");
+                            if (r.handoverInspection.tears) tags.push("Tears");
+                            if (r.handoverInspection.brokenButtons) tags.push("Broken Buttons");
+                            if (r.handoverInspection.brokenZipper) tags.push("Broken Zipper");
+                            if (r.handoverInspection.fabricDamage) tags.push("Fabric Damage");
+                            if (r.handoverInspection.missingAccessories) tags.push("Missing Accessories");
+
+                            return tags.length > 0 ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-3xs font-medium text-slate-500">Noted Defects:</span>
+                                {tags.map((t) => (
+                                  <span key={t} className="px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 text-3xs font-medium">
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-3xs text-emerald-700 font-medium">No initial garment defects recorded.</p>
+                            );
+                          })()}
+
+                          {r.handoverInspection.notes && (
+                            <p className="text-3xs text-slate-600 italic bg-white p-2 rounded-xl border border-slate-200/80">
+                              "{r.handoverInspection.notes}"
+                            </p>
+                          )}
+
+                          {r.handoverInspection.photos?.length > 0 && (
+                            <div className="flex items-center gap-2 pt-1">
+                              {r.handoverInspection.photos.map((url, pIdx) => (
+                                <a
+                                  key={pIdx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block w-12 h-12 rounded-xl overflow-hidden border border-slate-300 hover:opacity-80 transition"
+                                >
+                                  <img src={url} alt={`Handover ${pIdx + 1}`} className="w-full h-full object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Return Inspection Box */}
+                      {r.returnInspection?.inspectedAt && (
+                        <div className="p-3 rounded-2xl bg-blue-50/50 border border-blue-200 text-xs space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <span className="font-bold text-blue-900 flex items-center gap-1.5">
+                              <Camera size={14} className="text-blue-700" />
+                              Return Condition Inspection
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-white border border-blue-200 text-blue-800">
+                              Condition: {r.returnInspection.condition || "Good"}
+                            </span>
+                          </div>
+
+                          {r.returnInspection.notes && (
+                            <p className="text-3xs text-slate-600 italic bg-white p-2 rounded-xl border border-blue-200/80">
+                              "{r.returnInspection.notes}"
+                            </p>
+                          )}
+
+                          {r.returnInspection.photos?.length > 0 && (
+                            <div className="flex items-center gap-2 pt-1">
+                              {r.returnInspection.photos.map((url, pIdx) => (
+                                <a
+                                  key={pIdx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block w-12 h-12 rounded-xl overflow-hidden border border-blue-300 hover:opacity-80 transition"
+                                >
+                                  <img src={url} alt={`Return ${pIdx + 1}`} className="w-full h-full object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Damage Incident Box */}
+                      {hasDamage && (
+                        <div className={`p-3.5 rounded-2xl border text-xs space-y-2.5 ${
+                          r.damageReport?.status === "DAMAGE_RESOLVED"
+                            ? "bg-emerald-50/70 border-emerald-300 text-emerald-900"
+                            : "bg-red-50/80 border-red-300 text-red-950"
+                        }`}>
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2">
+                              <AlertCircle size={16} className={r.damageReport?.status === "DAMAGE_RESOLVED" ? "text-emerald-600" : "text-red-600"} />
+                              <span className="font-bold">
+                                {r.damageReport?.status === "DAMAGE_RESOLVED"
+                                  ? "Damage Settlement Resolved"
+                                  : "Damage Incident Report"}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded-full text-3xs font-bold uppercase tracking-wider bg-white border border-current">
+                                Severity: {r.damageReport?.severity || "minor"}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-3xs font-bold bg-white border border-current">
+                                Charge: ₹{r.damageReport?.amount || 0}
+                              </span>
+                            </div>
+                          </div>
+
+                          {r.damageReport?.description && (
+                            <p className="text-xs bg-white/80 p-2.5 rounded-xl border border-current/20 font-medium">
+                              {r.damageReport.description}
+                            </p>
+                          )}
+
+                          {r.damageReport?.photos?.length > 0 && (
+                            <div className="flex items-center gap-2 pt-1">
+                              {r.damageReport.photos.map((url, pIdx) => (
+                                <a
+                                  key={pIdx}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="block w-12 h-12 rounded-xl overflow-hidden border border-red-300 hover:opacity-80 transition"
+                                >
+                                  <img src={url} alt={`Damage evidence ${pIdx + 1}`} className="w-full h-full object-cover" />
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Action Buttons for Lifecycle Transitions */}
-                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-cm-border/60">
-                        {/* 1. Mark Payment Done (When in ADDED_TO_CART) */}
-                        {stage === "ADDED_TO_CART" && (
+                      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-cm-border/60">
+                        {/* 1. Payment Action / Status */}
+                        {stage === "ADDED_TO_CART" ? (
                           <button
                             onClick={() => handleMarkPaymentDone(id)}
                             disabled={Boolean(actionLoadingKey)}
-                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 cursor-pointer"
                           >
                             {actionLoadingKey === `${id}-payment` ? (
                               <>
@@ -971,10 +1137,15 @@ export default function AdminPage() {
                             ) : (
                               <>
                                 <CheckCircle2 size={14} />
-                                <span>Mark Payment Done</span>
+                                <span>Confirm Payment Received</span>
                               </>
                             )}
                           </button>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                            <CheckCircle2 size={13} />
+                            <span>Payment Received (₹{r.rentalAmount})</span>
+                          </span>
                         )}
 
                         {/* 2. Initiate Rent (When in PAYMENT_DONE) */}
@@ -982,7 +1153,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => handleInitiateRent(id)}
                             disabled={Boolean(actionLoadingKey)}
-                            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-purple-600/20 flex items-center gap-1.5 cursor-pointer"
                           >
                             {actionLoadingKey === `${id}-initiate` ? (
                               <>
@@ -1003,7 +1174,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => handleStartRentPeriod(id)}
                             disabled={Boolean(actionLoadingKey)}
-                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-blue-600/20 flex items-center gap-1.5 cursor-pointer"
                           >
                             {actionLoadingKey === `${id}-period` ? (
                               <>
@@ -1024,7 +1195,7 @@ export default function AdminPage() {
                           <button
                             onClick={() => handleMarkRentReceived(id)}
                             disabled={Boolean(actionLoadingKey)}
-                            className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white text-xs font-bold transition-all shadow-md shadow-emerald-700/20 flex items-center gap-1.5 cursor-pointer"
                           >
                             {actionLoadingKey === `${id}-receive` ? (
                               <>
@@ -1040,27 +1211,27 @@ export default function AdminPage() {
                           </button>
                         )}
 
-                        {/* Optional Handover Inspection */}
-                        {hasAdvance && stage !== "RENT_RECEIVED" && !hasHandover && (
+                        {/* Handover Inspection Button */}
+                        {hasAdvance && stage !== "RENT_RECEIVED" && (
                           <button
                             onClick={() => {
                               setInspectionData({
-                                condition: "Good",
-                                stains: false,
-                                tears: false,
-                                brokenButtons: false,
-                                brokenZipper: false,
-                                fabricDamage: false,
-                                missingAccessories: false,
-                                notes: "",
-                                photoUrl: ""
+                                condition: r.handoverInspection?.condition || "Good",
+                                stains: Boolean(r.handoverInspection?.stains),
+                                tears: Boolean(r.handoverInspection?.tears),
+                                brokenButtons: Boolean(r.handoverInspection?.brokenButtons),
+                                brokenZipper: Boolean(r.handoverInspection?.brokenZipper),
+                                fabricDamage: Boolean(r.handoverInspection?.fabricDamage),
+                                missingAccessories: Boolean(r.handoverInspection?.missingAccessories),
+                                notes: r.handoverInspection?.notes || "",
+                                photoUrl: r.handoverInspection?.photos?.[0] || ""
                               });
                               setInspectionModal({ type: "handover", rental: r });
                             }}
-                            className="px-3 py-1.5 rounded-xl border border-cm-border hover:bg-cm-soft text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1.5 rounded-xl border border-cm-border hover:bg-cm-soft text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                           >
                             <Camera size={13} />
-                            <span>Handover Inspection</span>
+                            <span>{hasHandover ? "Update Handover" : "Handover Inspection"}</span>
                           </button>
                         )}
 
@@ -1073,7 +1244,7 @@ export default function AdminPage() {
                             <button
                               onClick={() => handleReviewExtension(id, "APPROVED")}
                               disabled={Boolean(actionLoadingKey)}
-                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                             >
                               {actionLoadingKey === `${id}-ext-APPROVED` && <Loader2 size={12} className="animate-spin" />}
                               <span>Approve</span>
@@ -1081,7 +1252,7 @@ export default function AdminPage() {
                             <button
                               onClick={() => handleReviewExtension(id, "REJECTED")}
                               disabled={Boolean(actionLoadingKey)}
-                              className="px-2.5 py-1 rounded-xl bg-cm-red hover:bg-red-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1"
+                              className="px-2.5 py-1 rounded-xl bg-cm-red hover:bg-red-700 disabled:opacity-60 text-white text-xs font-bold flex items-center gap-1 cursor-pointer"
                             >
                               {actionLoadingKey === `${id}-ext-REJECTED` && <Loader2 size={12} className="animate-spin" />}
                               <span>Reject</span>
@@ -1089,32 +1260,32 @@ export default function AdminPage() {
                           </div>
                         )}
 
-                        {/* Return Inspection */}
-                        {hasAdvance && stage !== "RENT_RECEIVED" && (
+                        {/* Return Inspection Button */}
+                        {hasAdvance && stage !== "ADDED_TO_CART" && (
                           <button
                             onClick={() => {
                               setInspectionData({
-                                condition: "Good",
-                                stains: false,
-                                tears: false,
-                                brokenButtons: false,
-                                brokenZipper: false,
-                                fabricDamage: false,
-                                missingAccessories: false,
-                                notes: "",
-                                photoUrl: ""
+                                condition: r.returnInspection?.condition || "Good",
+                                stains: Boolean(r.returnInspection?.stains),
+                                tears: Boolean(r.returnInspection?.tears),
+                                brokenButtons: Boolean(r.returnInspection?.brokenButtons),
+                                brokenZipper: Boolean(r.returnInspection?.brokenZipper),
+                                fabricDamage: Boolean(r.returnInspection?.fabricDamage),
+                                missingAccessories: Boolean(r.returnInspection?.missingAccessories),
+                                notes: r.returnInspection?.notes || "",
+                                photoUrl: r.returnInspection?.photos?.[0] || ""
                               });
                               setInspectionModal({ type: "return", rental: r });
                             }}
-                            className="px-3 py-1.5 rounded-xl border border-cm-border hover:bg-cm-soft text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5"
+                            className="px-3 py-1.5 rounded-xl border border-cm-border hover:bg-cm-soft text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
                           >
                             <Camera size={13} />
-                            <span>Return Inspection</span>
+                            <span>{r.returnInspection?.inspectedAt ? "Update Return Inspection" : "Return Inspection"}</span>
                           </button>
                         )}
 
-                        {/* Report Damage */}
-                        {stage !== "RENT_RECEIVED" && !hasDamage && (
+                        {/* Report Damage Button */}
+                        {!hasDamage && stage !== "ADDED_TO_CART" && r.rentalStatus !== "CANCELLED" && (
                           <button
                             onClick={() => {
                               setDamageData({
@@ -1125,26 +1296,27 @@ export default function AdminPage() {
                               });
                               setDamageModal(r);
                             }}
-                            className="px-3 py-1.5 rounded-xl border border-cm-red/40 text-cm-red hover:bg-red-50 text-xs font-semibold transition-colors"
+                            className="px-3 py-1.5 rounded-xl border border-cm-red/40 text-cm-red hover:bg-red-50 text-xs font-semibold transition-colors cursor-pointer"
                           >
                             Report Damage
                           </button>
                         )}
 
-                        {/* Resolve Damage */}
+                        {/* Resolve Damage Button */}
                         {hasDamage && r.damageReport?.status !== "DAMAGE_RESOLVED" && (
                           <button
                             onClick={() => handleResolveDamage(id)}
                             disabled={Boolean(actionLoadingKey)}
-                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs font-bold transition-colors flex items-center gap-1"
+                            className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer"
                           >
                             {actionLoadingKey === `${id}-damage` && <Loader2 size={12} className="animate-spin" />}
-                            <span>Resolve Damage (₹{r.damageReport?.amount}) & Complete</span>
+                            <span>Resolve Damage (₹{r.damageReport?.amount || 0}) & Complete</span>
                           </button>
                         )}
 
-                        {stage === "RENT_RECEIVED" && (
-                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 px-2 py-1 bg-emerald-50 rounded-lg">
+                        {/* Completed status indicator */}
+                        {stage === "RENT_RECEIVED" && (!hasDamage || r.damageReport?.status === "DAMAGE_RESOLVED") && (
+                          <span className="text-xs font-bold text-emerald-700 flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 rounded-xl border border-emerald-200">
                             <CheckCircle2 size={13} /> Cloth Received • Rental Finished
                           </span>
                         )}
@@ -1927,7 +2099,7 @@ export default function AdminPage() {
                               className="px-4 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
                             >
                               <ShieldCheck size={14} />
-                              <span>Verify Payment</span>
+                              <span>{p.status === "Rejected" ? "Re-verify Payment" : "Verify Payment"}</span>
                             </button>
                           )}
 
@@ -2149,6 +2321,20 @@ export default function AdminPage() {
                   </span>
                 </div>
               </div>
+
+              {verifyModal.payment.status === "Rejected" && (
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                  <p className="font-bold flex items-center gap-1">
+                    <span>⚠️ Previously Marked as Rejected</span>
+                  </p>
+                  <p className="text-2xs text-amber-800">
+                    {verifyModal.payment.rejectionReason
+                      ? `Reason given: "${verifyModal.payment.rejectionReason}". `
+                      : ""}
+                    Confirming will override the previous rejection, mark this payment as Verified, and confirm any linked rental booking.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-1 text-left">
                 <label className="text-2xs font-bold uppercase tracking-wider text-cm-black">

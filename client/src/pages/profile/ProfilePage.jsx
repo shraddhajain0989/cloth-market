@@ -22,8 +22,8 @@ const TIMELINE_STEPS = [
 
 function getTimelineIndex(status) {
   if (status === "ADDED_TO_CART" || status === "PENDING_ADVANCE") return 0;
-  if (status === "PAYMENT_DONE" || status === "CONFIRMED" || status === "READY_FOR_HANDOVER") return 1;
-  if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION") return 2;
+  if (status === "PAYMENT_DONE" || status === "CONFIRMED") return 1;
+  if (status === "RENT_INITIATED" || status === "HANDOVER_INSPECTION" || status === "READY_FOR_HANDOVER") return 2;
   if (status === "RENT_PERIOD" || status === "ACTIVE_RENTAL" || status === "EXTENSION_REQUESTED" || status === "EXTENDED") return 3;
   if (status === "RENT_RECEIVED" || status === "COMPLETED" || status === "RETURN_INSPECTION" || status === "DAMAGE_REPORTED" || status === "DAMAGE_SETTLEMENT") return 4;
   return 0;
@@ -36,11 +36,12 @@ function getHumanStatus(status) {
       return "Added to Cart";
     case "PAYMENT_DONE":
     case "CONFIRMED":
-    case "READY_FOR_HANDOVER":
       return "Payment Done";
     case "RENT_INITIATED":
     case "HANDOVER_INSPECTION":
       return "Rent Initiated";
+    case "READY_FOR_HANDOVER":
+      return "Handover Agreed (Ready)";
     case "RENT_PERIOD":
     case "ACTIVE_RENTAL":
       return "Rent Period (Active)";
@@ -397,7 +398,7 @@ export default function ProfilePage() {
                 )}
 
                 {/* Action: Request Extension */}
-                {["ACTIVE_RENTAL", "CONFIRMED"].includes(r.rentalStatus) && (
+                {["ACTIVE_RENTAL", "CONFIRMED", "RENT_PERIOD", "EXTENDED"].includes(r.rentalStatus) && (
                   <div className="pt-2 flex justify-end">
                     <button
                       type="button"
