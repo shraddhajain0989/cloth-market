@@ -13,6 +13,8 @@ import AiLabPage from "../pages/shop/AiLabPage";
 import HomePage from "../pages/shop/HomePage";
 import ProfilePage from "../pages/profile/ProfilePage";
 import SocialPage from "../pages/social/SocialPage";
+import TermsPage from "../pages/legal/TermsPage";
+import PrivacyPolicyPage from "../pages/legal/PrivacyPolicyPage";
 
 export default function App() {
   const bootstrap = useAuthStore((state) => state.bootstrap);
@@ -28,6 +30,10 @@ export default function App() {
         <Route index element={<HomePage />} />
         <Route path="/social" element={<SocialPage />} />
         <Route path="/ai-lab" element={<AiLabPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+        <Route path="/terms-and-conditions" element={<TermsPage />} />
+        <Route path="/privacy" element={<PrivacyPolicyPage />} />
+        <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
         <Route
           path="/profile"
           element={

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { X, Calendar, Check, AlertCircle } from "lucide-react";
 import { rentalApi } from "../../api/endpoints";
 
@@ -230,8 +231,15 @@ export default function RentalModal({ product, open, onClose, onSubmit, loading 
           >
             {loading ? "Processing..." : "Book Rental"}
           </button>
-          <p className="text-center text-2xs text-cm-muted">
-            Confirm your payment with the Admin to finalize your booking.
+          <p className="text-center text-3xs text-cm-muted leading-relaxed">
+            By booking, you agree to our{" "}
+            <Link to="/terms" target="_blank" className="underline hover:text-cm-black">
+              Terms & Conditions
+            </Link>{" "}
+            and{" "}
+            <Link to="/privacy" target="_blank" className="underline hover:text-cm-black">
+              Privacy Policy
+            </Link>.
           </p>
         </form>
       </div>
